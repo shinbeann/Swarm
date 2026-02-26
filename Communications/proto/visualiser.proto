@@ -1,0 +1,40 @@
+syntax = "proto3";
+package swarm;
+
+option go_package = "github.com/yihre/swarm-project/communications;communications";
+
+service VisualiserService {
+  // visualiser requests for environment data from the world.
+  rpc GetEnvironmentData(EnvironmentRequest) returns (EnvironmentResponse);
+  // visualiser requests for robot data relevant to the visualiser from the world.
+  rpc GetRobotData(RobotDataRequest) returns (RobotDataResponse);
+}
+
+message EnvironmentRequest {}
+
+message EnvironmentResponse {
+  double width = 1;
+  double height = 2;
+  repeated Obstacle obstacles = 3;
+}
+
+message Obstacle {
+  string id = 1;
+  double x = 2;
+  double y = 3;
+  double width = 4;
+  double height = 5;
+}
+
+message RobotDataRequest {}
+
+message RobotInfo {
+  string id = 1;
+  double x = 2;
+  double y = 3;
+  double heading = 4;
+}
+
+message RobotDataResponse {
+  repeated RobotInfo robots = 1;
+}

@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  world-engine:
+    build:
+      context: .
+      dockerfile: WorldEngine/Dockerfile
+    ports:
+      - "50051:50051"
+    networks:
+      - swarm-net
+    container_name: world-engine
+
+  robot-1:
+    build:
+      context: .
+      dockerfile: Robot/Dockerfile
+    environment:
+      - ROBOT_ID=robot-1
+    command: [ "--world-engine=world-engine:50051", "--id=robot-1" ]
+    depends_on:
+      - world-engine
+    networks:
+      - swarm-net
+
+  robot-2:
+    build:
+      context: .
+      dockerfile: Robot/Dockerfile
+    environment:
+      - ROBOT_ID=robot-2
+    command: [ "--world-engine=world-engine:50051", "--id=robot-2" ]
+    depends_on:
+      - world-engine
+    networks:
+      - swarm-net
+
+  visualiser:
+    build:
+      context: .
+      dockerfile: Visualiser/Dockerfile
+    ports:
+      - "3000:8080"
+    depends_on:
+      - world-engine
+    networks:
+      - swarm-net
+
+networks:
+  swarm-net:
+    driver: bridge

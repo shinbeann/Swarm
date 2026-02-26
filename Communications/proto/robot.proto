@@ -1,0 +1,69 @@
+syntax = "proto3";
+package swarm;
+
+option go_package = "github.com/yihre/swarm-project/communications;communications";
+
+service RobotService {
+  // robot signifies an intention to move to a position or along a direction vector with a velocity.
+  rpc MoveToPosition(MoveRequest) returns (MoveResponse);
+  // robot requests for sensor data from the world.
+  rpc GetSensorData(SensorRequest) returns (SensorResponse);
+  // robot requests for network data from the world.
+  rpc GetNetworkData(NetworkRequest) returns (NetworkResponse);
+  // robot sends a heartbeat to the world to indicate that it is still alive.
+  rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message MoveRequest {
+  string robot_id = 1;
+  // Position or direction
+  double x = 2;
+  double y = 3;
+  double velocity = 4;
+}
+
+message MoveResponse {
+  bool success = 1;
+}
+
+message SensorRequest {
+  string robot_id = 1;
+}
+
+message ObjectData {
+  string id = 1;
+  double x = 2;
+  double y = 3;
+  string type = 4;
+}
+
+message SensorResponse {
+  repeated ObjectData objects = 1;
+}
+
+message NetworkRequest {
+  string robot_id = 1;
+}
+
+message NetworkData {
+  string target_robot_id = 1;
+  double bandwidth = 2;
+  double latency = 3;
+  double reliability = 4;
+}
+
+message NetworkResponse {
+  repeated NetworkData network_conditions = 1;
+}
+
+message HeartbeatRequest {
+  string robot_id = 1;
+  double x = 2;
+  double y = 3;
+  double heading = 4;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+}
+
