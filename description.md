@@ -6,7 +6,7 @@ The project is split into the following major subprojects:
 * Communications: defines the gRPC service and messages used for communications between robots, world and the visualiser.
 * Robot: defines the robot and its behaviour.  
 * World: serves as the central authority for the simulation.  
-* Visualiser: receives data from the world and visualizes them.  
+* Visualiser: receives data from the world and visualizes them. It uses a Backend-for-Frontend (BFF) architecture, with a Go proxy translating gRPC streams to WebSockets for a web-based React/PixiJS frontend.
 
 # Architecture
 
@@ -36,9 +36,13 @@ Specifically, there should be the following services:
     * SendHeartbeat: robot sends a heartbeat to the world to indicate that it is still alive.  
 * VisualiserService: used for communication between world and visualiser, with the world as the server and the visualiser as the client.  
     * GetEnvironmentData: visualiser requests for environment data from the world.  
-    * GetRobotData: visualiser requests for robot data relevant to the visualiser from the world.  
+    * GetRobotData: visualiser requests for robot data relevant to the visualiser from the world.
 
 Note that the grpc implementations of these messages and services should be put into the respective subprojects.  
+
+### Environment definitions
+The environment defines a coordinate space starting from 0,0, up to a defined boundary.
+* Obstacles: Static rectangular areas defined by an X, Y, Width, and Height that robots cannot enter. They are returned by the World Engine in `GetEnvironmentData` for the Visualiser and dynamically within range during `GetSensorData` for the Robots.
 
 ## Robot
 
