@@ -40,18 +40,12 @@ The entire swarm simulation is containerized and orchestrated via Docker Compose
 
 ## Expanding the Swarm
 
-To add more robots to the simulation, open `docker-compose.yml` and duplicate one of the robot configurations, ensuring you update the container name and the `ROBOT_ID` environment variable:
+You can now start any number of robot containers without manually duplicating services.
 
-```yaml
-  robot-3:
-    build:
-      context: .
-      dockerfile: Robot/Dockerfile
-    environment:
-      - ROBOT_ID=robot-3
-    command: ["--world-engine=world-engine:50051", "--id=robot-3"]
-    depends_on:
-      - world-engine
-    networks:
-      - swarm-net
+Example: start 5 robots (replacing the previous per-service robot entries):
+
+```bash
+docker compose up --build --scale robot=5
 ```
+
+Each robot will derive a unique ID from its container hostname when no `ROBOT_ID`/`-id` is provided, so the visualiser and world engine will receive distinct robot identifiers automatically.

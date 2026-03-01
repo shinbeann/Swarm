@@ -11,25 +11,12 @@ services:
       - swarm-net
     container_name: world-engine
 
-  robot-1:
+  robot:
     build:
       context: .
       dockerfile: Robot/Dockerfile
-    environment:
-      - ROBOT_ID=robot-1
-    command: [ "--world-engine=world-engine:50051", "--id=robot-1" ]
-    depends_on:
-      - world-engine
-    networks:
-      - swarm-net
-
-  robot-2:
-    build:
-      context: .
-      dockerfile: Robot/Dockerfile
-    environment:
-      - ROBOT_ID=robot-2
-    command: [ "--world-engine=world-engine:50051", "--id=robot-2" ]
+    # Robot will derive a unique ID from the container hostname when not provided.
+    command: [ "--world-engine=world-engine:50051" ]
     depends_on:
       - world-engine
     networks:

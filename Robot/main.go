@@ -25,7 +25,16 @@ func main() {
 	flag.Parse()
 
 	if *robotID == "" {
-		log.Fatal("ROBOT_ID environment variable or -id flag is required")
+		// If no explicit ID provided via env or -id flag, fall back to container hostname.
+		// This lets `docker compose --scale robot=N` start unique robots without extra envs.
+		hn, err := os.Hostname()
+		if err == nil && hn != "" {
+			*robotID = hn
+		} else if env := os.Getenv("HOSTNAME"); env != "" {
+			*robotID = env
+		} else {
+			log.Fatal("ROBOT_ID environment variable, -id flag, or container hostname is required")
+		}
 	}
 
 	log.Printf("Starting Robot %s...", *robotID)
