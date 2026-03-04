@@ -55,10 +55,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize position state (will be updated by WorldEngine)
-	posX := rand.Float64() * 800
-	posY := rand.Float64() * 600
-	head := rand.Float64() * 2 * 3.14159
+	robot := NewRobot(*robotID, client)
 
 	// Control loop
 	go func() {
@@ -70,7 +67,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				runControlLoop(ctx, client, &posX, &posY, &head)
+				robot.Run(ctx)
 			}
 		}
 	}()
