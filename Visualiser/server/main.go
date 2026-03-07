@@ -59,7 +59,7 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 	defer ws.Close()
 
 	// Control loop to fetch data from WorldEngine and stream to UI
-	ticker := time.NewTicker(200 * time.Millisecond) // 5 FPS update rate for example
+	ticker := time.NewTicker(33 * time.Millisecond) // 30 FPS update rate for example
 	defer ticker.Stop()
 
 	for {

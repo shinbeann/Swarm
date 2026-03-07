@@ -62,7 +62,7 @@ func main() {
 
 	// Control loop
 	go func() {
-		ticker := time.NewTicker(200 * time.Millisecond) // Move 5 times a second
+		ticker := time.NewTicker(30 * time.Millisecond) // Move 10 times a second
 		defer ticker.Stop()
 
 		for {
@@ -130,7 +130,7 @@ func runControlLoop(ctx context.Context, client pb.RobotServiceClient, x, y, hea
 
 	dirX := math.Cos(newAttemptHeading)
 	dirY := math.Sin(newAttemptHeading)
-	velocity := 50.0 // Units per second
+	velocity := 20.0 // Units per second
 
 	_, err = client.MoveToPosition(ctx, &pb.MoveRequest{
 		RobotId:  *robotID,
