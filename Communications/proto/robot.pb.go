@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.0--rc2
-// source: robot.proto
+// source: Communications/proto/robot.proto
 
 package communications
 
@@ -34,7 +34,7 @@ type MoveRequest struct {
 
 func (x *MoveRequest) Reset() {
 	*x = MoveRequest{}
-	mi := &file_robot_proto_msgTypes[0]
+	mi := &file_Communications_proto_robot_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *MoveRequest) String() string {
 func (*MoveRequest) ProtoMessage() {}
 
 func (x *MoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[0]
+	mi := &file_Communications_proto_robot_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +59,7 @@ func (x *MoveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveRequest.ProtoReflect.Descriptor instead.
 func (*MoveRequest) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{0}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *MoveRequest) GetRobotId() string {
@@ -99,7 +99,7 @@ type MoveResponse struct {
 
 func (x *MoveResponse) Reset() {
 	*x = MoveResponse{}
-	mi := &file_robot_proto_msgTypes[1]
+	mi := &file_Communications_proto_robot_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -111,7 +111,7 @@ func (x *MoveResponse) String() string {
 func (*MoveResponse) ProtoMessage() {}
 
 func (x *MoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[1]
+	mi := &file_Communications_proto_robot_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -124,7 +124,7 @@ func (x *MoveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveResponse.ProtoReflect.Descriptor instead.
 func (*MoveResponse) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{1}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MoveResponse) GetSuccess() bool {
@@ -143,7 +143,7 @@ type SensorRequest struct {
 
 func (x *SensorRequest) Reset() {
 	*x = SensorRequest{}
-	mi := &file_robot_proto_msgTypes[2]
+	mi := &file_Communications_proto_robot_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -155,7 +155,7 @@ func (x *SensorRequest) String() string {
 func (*SensorRequest) ProtoMessage() {}
 
 func (x *SensorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[2]
+	mi := &file_Communications_proto_robot_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -168,7 +168,7 @@ func (x *SensorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SensorRequest.ProtoReflect.Descriptor instead.
 func (*SensorRequest) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{2}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SensorRequest) GetRobotId() string {
@@ -190,7 +190,7 @@ type ObjectData struct {
 
 func (x *ObjectData) Reset() {
 	*x = ObjectData{}
-	mi := &file_robot_proto_msgTypes[3]
+	mi := &file_Communications_proto_robot_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -202,7 +202,7 @@ func (x *ObjectData) String() string {
 func (*ObjectData) ProtoMessage() {}
 
 func (x *ObjectData) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[3]
+	mi := &file_Communications_proto_robot_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -215,7 +215,7 @@ func (x *ObjectData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectData.ProtoReflect.Descriptor instead.
 func (*ObjectData) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{3}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ObjectData) GetId() string {
@@ -255,7 +255,7 @@ type SensorResponse struct {
 
 func (x *SensorResponse) Reset() {
 	*x = SensorResponse{}
-	mi := &file_robot_proto_msgTypes[4]
+	mi := &file_Communications_proto_robot_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +267,7 @@ func (x *SensorResponse) String() string {
 func (*SensorResponse) ProtoMessage() {}
 
 func (x *SensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[4]
+	mi := &file_Communications_proto_robot_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +280,7 @@ func (x *SensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SensorResponse.ProtoReflect.Descriptor instead.
 func (*SensorResponse) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{4}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SensorResponse) GetObjects() []*ObjectData {
@@ -299,7 +299,7 @@ type NetworkRequest struct {
 
 func (x *NetworkRequest) Reset() {
 	*x = NetworkRequest{}
-	mi := &file_robot_proto_msgTypes[5]
+	mi := &file_Communications_proto_robot_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -311,7 +311,7 @@ func (x *NetworkRequest) String() string {
 func (*NetworkRequest) ProtoMessage() {}
 
 func (x *NetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[5]
+	mi := &file_Communications_proto_robot_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -324,7 +324,7 @@ func (x *NetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkRequest.ProtoReflect.Descriptor instead.
 func (*NetworkRequest) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{5}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *NetworkRequest) GetRobotId() string {
@@ -346,7 +346,7 @@ type NetworkData struct {
 
 func (x *NetworkData) Reset() {
 	*x = NetworkData{}
-	mi := &file_robot_proto_msgTypes[6]
+	mi := &file_Communications_proto_robot_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -358,7 +358,7 @@ func (x *NetworkData) String() string {
 func (*NetworkData) ProtoMessage() {}
 
 func (x *NetworkData) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[6]
+	mi := &file_Communications_proto_robot_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -371,7 +371,7 @@ func (x *NetworkData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkData.ProtoReflect.Descriptor instead.
 func (*NetworkData) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{6}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *NetworkData) GetTargetRobotId() string {
@@ -411,7 +411,7 @@ type NetworkResponse struct {
 
 func (x *NetworkResponse) Reset() {
 	*x = NetworkResponse{}
-	mi := &file_robot_proto_msgTypes[7]
+	mi := &file_Communications_proto_robot_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -423,7 +423,7 @@ func (x *NetworkResponse) String() string {
 func (*NetworkResponse) ProtoMessage() {}
 
 func (x *NetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[7]
+	mi := &file_Communications_proto_robot_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -436,7 +436,7 @@ func (x *NetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkResponse.ProtoReflect.Descriptor instead.
 func (*NetworkResponse) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{7}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *NetworkResponse) GetNetworkConditions() []*NetworkData {
@@ -458,7 +458,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_robot_proto_msgTypes[8]
+	mi := &file_Communications_proto_robot_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -470,7 +470,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[8]
+	mi := &file_Communications_proto_robot_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -483,7 +483,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{8}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *HeartbeatRequest) GetRobotId() string {
@@ -523,7 +523,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_robot_proto_msgTypes[9]
+	mi := &file_Communications_proto_robot_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -535,7 +535,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[9]
+	mi := &file_Communications_proto_robot_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -548,7 +548,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{9}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *HeartbeatResponse) GetSuccess() bool {
@@ -562,13 +562,14 @@ type PeerSyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SenderId      string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"` // For simulating large payloads (e.g. map sync)
+	LamportClock  int64                  `protobuf:"varint,3,opt,name=lamport_clock,json=lamportClock,proto3" json:"lamport_clock,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PeerSyncRequest) Reset() {
 	*x = PeerSyncRequest{}
-	mi := &file_robot_proto_msgTypes[10]
+	mi := &file_Communications_proto_robot_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -580,7 +581,7 @@ func (x *PeerSyncRequest) String() string {
 func (*PeerSyncRequest) ProtoMessage() {}
 
 func (x *PeerSyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[10]
+	mi := &file_Communications_proto_robot_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -593,7 +594,7 @@ func (x *PeerSyncRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerSyncRequest.ProtoReflect.Descriptor instead.
 func (*PeerSyncRequest) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{10}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PeerSyncRequest) GetSenderId() string {
@@ -610,6 +611,13 @@ func (x *PeerSyncRequest) GetPayload() []byte {
 	return nil
 }
 
+func (x *PeerSyncRequest) GetLamportClock() int64 {
+	if x != nil {
+		return x.LamportClock
+	}
+	return 0
+}
+
 type PeerSyncResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Received      bool                   `protobuf:"varint,1,opt,name=received,proto3" json:"received,omitempty"`
@@ -619,7 +627,7 @@ type PeerSyncResponse struct {
 
 func (x *PeerSyncResponse) Reset() {
 	*x = PeerSyncResponse{}
-	mi := &file_robot_proto_msgTypes[11]
+	mi := &file_Communications_proto_robot_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +639,7 @@ func (x *PeerSyncResponse) String() string {
 func (*PeerSyncResponse) ProtoMessage() {}
 
 func (x *PeerSyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_robot_proto_msgTypes[11]
+	mi := &file_Communications_proto_robot_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +652,7 @@ func (x *PeerSyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerSyncResponse.ProtoReflect.Descriptor instead.
 func (*PeerSyncResponse) Descriptor() ([]byte, []int) {
-	return file_robot_proto_rawDescGZIP(), []int{11}
+	return file_Communications_proto_robot_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PeerSyncResponse) GetReceived() bool {
@@ -654,11 +662,11 @@ func (x *PeerSyncResponse) GetReceived() bool {
 	return false
 }
 
-var File_robot_proto protoreflect.FileDescriptor
+var File_Communications_proto_robot_proto protoreflect.FileDescriptor
 
-const file_robot_proto_rawDesc = "" +
+const file_Communications_proto_robot_proto_rawDesc = "" +
 	"\n" +
-	"\vrobot.proto\x12\x05swarm\"`\n" +
+	" Communications/proto/robot.proto\x12\x05swarm\"`\n" +
 	"\vMoveRequest\x12\x19\n" +
 	"\brobot_id\x18\x01 \x01(\tR\arobotId\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
@@ -691,10 +699,11 @@ const file_robot_proto_rawDesc = "" +
 	"\x01y\x18\x03 \x01(\x01R\x01y\x12\x18\n" +
 	"\aheading\x18\x04 \x01(\x01R\aheading\"-\n" +
 	"\x11HeartbeatResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"H\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"m\n" +
 	"\x0fPeerSyncRequest\x12\x1b\n" +
 	"\tsender_id\x18\x01 \x01(\tR\bsenderId\x12\x18\n" +
-	"\apayload\x18\x02 \x01(\fR\apayload\".\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\x12#\n" +
+	"\rlamport_clock\x18\x03 \x01(\x03R\flamportClock\".\n" +
 	"\x10PeerSyncResponse\x12\x1a\n" +
 	"\breceived\x18\x01 \x01(\bR\breceived2\x8c\x02\n" +
 	"\fRobotService\x129\n" +
@@ -706,19 +715,19 @@ const file_robot_proto_rawDesc = "" +
 	"\bSyncData\x12\x16.swarm.PeerSyncRequest\x1a\x17.swarm.PeerSyncResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
 
 var (
-	file_robot_proto_rawDescOnce sync.Once
-	file_robot_proto_rawDescData []byte
+	file_Communications_proto_robot_proto_rawDescOnce sync.Once
+	file_Communications_proto_robot_proto_rawDescData []byte
 )
 
-func file_robot_proto_rawDescGZIP() []byte {
-	file_robot_proto_rawDescOnce.Do(func() {
-		file_robot_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_robot_proto_rawDesc), len(file_robot_proto_rawDesc)))
+func file_Communications_proto_robot_proto_rawDescGZIP() []byte {
+	file_Communications_proto_robot_proto_rawDescOnce.Do(func() {
+		file_Communications_proto_robot_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_Communications_proto_robot_proto_rawDesc), len(file_Communications_proto_robot_proto_rawDesc)))
 	})
-	return file_robot_proto_rawDescData
+	return file_Communications_proto_robot_proto_rawDescData
 }
 
-var file_robot_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
-var file_robot_proto_goTypes = []any{
+var file_Communications_proto_robot_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_Communications_proto_robot_proto_goTypes = []any{
 	(*MoveRequest)(nil),       // 0: swarm.MoveRequest
 	(*MoveResponse)(nil),      // 1: swarm.MoveResponse
 	(*SensorRequest)(nil),     // 2: swarm.SensorRequest
@@ -732,7 +741,7 @@ var file_robot_proto_goTypes = []any{
 	(*PeerSyncRequest)(nil),   // 10: swarm.PeerSyncRequest
 	(*PeerSyncResponse)(nil),  // 11: swarm.PeerSyncResponse
 }
-var file_robot_proto_depIdxs = []int32{
+var file_Communications_proto_robot_proto_depIdxs = []int32{
 	3,  // 0: swarm.SensorResponse.objects:type_name -> swarm.ObjectData
 	6,  // 1: swarm.NetworkResponse.network_conditions:type_name -> swarm.NetworkData
 	0,  // 2: swarm.RobotService.MoveToPosition:input_type -> swarm.MoveRequest
@@ -752,26 +761,26 @@ var file_robot_proto_depIdxs = []int32{
 	0,  // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_robot_proto_init() }
-func file_robot_proto_init() {
-	if File_robot_proto != nil {
+func init() { file_Communications_proto_robot_proto_init() }
+func file_Communications_proto_robot_proto_init() {
+	if File_Communications_proto_robot_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_robot_proto_rawDesc), len(file_robot_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_Communications_proto_robot_proto_rawDesc), len(file_Communications_proto_robot_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
-		GoTypes:           file_robot_proto_goTypes,
-		DependencyIndexes: file_robot_proto_depIdxs,
-		MessageInfos:      file_robot_proto_msgTypes,
+		GoTypes:           file_Communications_proto_robot_proto_goTypes,
+		DependencyIndexes: file_Communications_proto_robot_proto_depIdxs,
+		MessageInfos:      file_Communications_proto_robot_proto_msgTypes,
 	}.Build()
-	File_robot_proto = out.File
-	file_robot_proto_goTypes = nil
-	file_robot_proto_depIdxs = nil
+	File_Communications_proto_robot_proto = out.File
+	file_Communications_proto_robot_proto_goTypes = nil
+	file_Communications_proto_robot_proto_depIdxs = nil
 }

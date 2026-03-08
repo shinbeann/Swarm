@@ -10,7 +10,7 @@ WORKDIR /app/Robot
 
 # Download dependencies and build
 RUN go mod download
-RUN go build -o /robot-bin main.go
+RUN go build -o /robot-bin .
 
 FROM alpine:latest
 

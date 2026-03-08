@@ -50,22 +50,22 @@ The environment defines a coordinate space starting from 0,0, up to a defined bo
 
 ## Robot
 
-Each robot is an independent agent that runs its own control loop. It is responsible for its own movement, sensor data processing and decision making.  
+Each robot is an independent agent that runs its own control loop, encapsulated in a `Robot` struct. It is responsible for its own movement, sensor data processing, and decision-making.  
 
-The robot should be defined in Go. Each robot will run in its own docker container, with the whole swarm being deployed via docker compose.  
+The robot is implemented in Go. Each robot runs in its own Docker container, with the whole swarm being deployed via Docker Compose.  
 
-Robots also communicate with the world engine using gRPC.  
+Robots communicate with the World Engine using gRPC and maintain a local `LamportClock` for logical timing.
 
 ### Peer-to-Peer Communication
-Robots will communicate with each other natively using a localized `PeerService` hosted on a secondary port (`:50052`). This communication physically enacts the simulated network constraints bounded by the World Engine. 
-In the control loop, robots evaluate their peers based on `GetNetworkData`, and attempt to propagate payloads (e.g. 1MB mock data):
+Robots communicate with each other natively using a localized `PeerService` hosted on a secondary port (`:50052`). This communication physically enacts the simulated network constraints bounded by the World Engine. 
+In the control loop, robots evaluate their peers based on `GetNetworkData`, and attempt to propagate payloads (e.g., 1MB mock data) and synchronize their `LamportClock`:
 * **Reliability:** The packet is subjected to a random chance of dropping completely before it leaves the sender.
 * **Bandwidth & Latency:** If not dropped, the theoretical transmission time matching the bandwidth is calculated and added to the network latency, before artificially sleeping the goroutine to delay the actual gRPC request execution.
 
 ## World
 The world subproject serves as the central authority for the simulation. It should be written in Go.  
 
-For the purpose of this simulation, the world is a 2d plane with a defined boundary.  
+For the purpose of this simulation, the world is a 2D plane with a defined boundary of 1000×1000 units.  
 
 ### Simulated Network 
 The World Engine tracks all active robots and establishes peer availability and metrics based strictly on Euclidean distances between them when responding to `GetNetworkData`. It utilizes the following degradation parameters:
@@ -97,9 +97,9 @@ Major technical and design decisions are tracked in `docs/adr/`:
 
 The following features are implemented and running in the current Docker Compose cluster:
 
-- **Robot control loop**: Runs at **30ms intervals (~33 Hz)**. Each tick calls `SendHeartbeat`, `GetSensorData`, and `MoveToPosition` against the World Engine. Note: the velocity applied to movement uses a hardcoded `0.2s` time delta (equivalent to 5 FPS), which does not match the actual 33 Hz tick rate — this is a known inconsistency to be resolved when implementing proper kinematics. The World Engine tracks robots in a registry, pruning any that miss heartbeats for 5+ seconds (checked every 2s by a cleanup ticker).
+- **Robot control loop**: Runs at **30ms intervals (~33 Hz)**, encapsulated in the `Robot.Run` method. Each tick calls `SendHeartbeat`, `GetSensorData`, and `MoveToPosition` against the World Engine. The World Engine tracks robots in a registry, pruning any that miss heartbeats for 5+ seconds (checked every 2s by a cleanup ticker).
 - **Random movement with avoidance**: Robots drift randomly with a slight heading bias. If `GetSensorData` returns an obstacle within 5 units, the robot reverses its heading by π radians.
 - **Boundary walls**: The World Engine spawns four rectangular walls at the edges of the 1000×1000 world at startup.
 - **Visualiser dashboard**: The React+PixiJS UI renders environment boundary, obstacles (red fill), and robots (green triangles) in real-time via WebSocket.
 - **Simulated network constraints**: The World Engine's `GetNetworkData` calculates per-robot peer conditions based on Euclidean distance. Max communication range is `250.0` units with linear degradation of bandwidth (50→1 Mbps), latency (5→250 ms), and reliability (1.0→0.5).
-- **Robot P2P sync**: Each robot hosts a `PeerService` gRPC server on port `:50052`. Every 2 seconds, it fetches peer conditions from the World Engine and dispatches a `SyncData` call to each in-range neighbor, subject to simulated packet drops (reliability), and `time.Sleep`-based delay (latency + bandwidth transfer time for a 1MB payload).
+- **Robot P2P sync**: Each robot hosts a `PeerService` gRPC server on port `:50052`. Every 2 seconds, it fetches peer conditions from the World Engine and dispatches a `SyncData` call to each in-range neighbor, subject to simulated packet drops (reliability), and `time.Sleep`-based delay (latency + bandwidth transfer time for a 1MB payload). The sync now includes a `LamportClock` to maintain logical time across the swarm.

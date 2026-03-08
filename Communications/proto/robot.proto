@@ -75,6 +75,7 @@ service PeerService {
 message PeerSyncRequest {
   string sender_id = 1;
   bytes payload = 2; // For simulating large payloads (e.g. map sync)
+  int64 lamport_clock = 3;
 }
 
 message PeerSyncResponse {

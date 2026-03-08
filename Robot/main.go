@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	pb "github.com/yihre/swarm-project/communications/proto"
 	"google.golang.org/grpc"
@@ -80,19 +79,7 @@ func main() {
 	robot := NewRobot(*robotID, client)
 
 	// Control loop
-	go func() {
-		ticker := time.NewTicker(30 * time.Millisecond) // Move ~33 times a second
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				robot.Run(ctx)
-			}
-		}
-	}()
+	go robot.Run(ctx)
 
 	<-sigCh
 	log.Println("Shutting down robot...")

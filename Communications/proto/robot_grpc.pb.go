@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0--rc2
-// source: robot.proto
+// source: Communications/proto/robot.proto
 
 package communications
 
@@ -239,7 +239,7 @@ var RobotService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "robot.proto",
+	Metadata: "Communications/proto/robot.proto",
 }
 
 const (
@@ -345,5 +345,5 @@ var PeerService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "robot.proto",
+	Metadata: "Communications/proto/robot.proto",
 }

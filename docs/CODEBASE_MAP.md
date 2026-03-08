@@ -36,11 +36,11 @@ graph TD
 
 | Component | Loop / Timer | Interval | Notes |
 | :--- | :--- | :--- | :--- |
-| **Robot** | Control loop ticker | **30 ms (~33 Hz)** | Each tick: `SendHeartbeat` → `GetSensorData` → `MoveToPosition`. |
-| **Robot** | P2P network sync | **Every 2 s** | `GetNetworkData` → goroutine per peer dispatching simulated `SyncData`. |
+| **Robot** | Control loop ticker | **30 ms (~33 Hz)** | Managed within `Robot.Run`. Each tick: `SendHeartbeat` → `GetSensorData` → `MoveToPosition`. |
+| **Robot** | P2P network sync | **Every 2 s** | `GetNetworkData` → goroutine per peer dispatching simulated `SyncData` (including `LamportClock`). |
 | **WorldEngine** | Stale-robot cleanup | **Every 2 s** | Removes robots whose `LastSeen` exceeds **5 s** from the registry. |
 
-> **Known inconsistency**: `Robot/main.go` applies a hardcoded `0.2 s` time-delta to velocity (5 FPS equivalent) inside a 33 Hz control loop. Movement speed in the world is therefore **~6.6× faster** than intended. This should be corrected when implementing proper kinematics (use `time.Since(lastTick)` instead of a fixed delta).
+> **Known inconsistency**: `Robot/robot.go` applies a hardcoded `0.2 s` time-delta to velocity (5 FPS equivalent) inside a 33 Hz control loop. Movement speed in the world is therefore **~6.6× faster** than intended. This should be corrected when implementing proper kinematics (use `time.Since(lastTick)` instead of a fixed delta).
 
 ## Architecture Decision Records
 
