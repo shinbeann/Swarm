@@ -7,9 +7,9 @@ This project explores distributed computing concepts. The robots form a swarm to
 ## Project Architecture
 
 The architecture relies on a **Hub and Spoke** pattern for simulation physics, while preserving distributed concepts for the robots' logic:
-* **World Engine (Go/gRPC)**: The central authority. It simulates the 2D plane, generates boundary obstacles, processes robot intents (movement), and provides restricted, "faked" localized sensor data and simulated network constraint conditions to individual robots.
-* **Robots (Go/gRPC)**: Independent agents running individual control loops. They query the World Engine for sensor data/obstacles and submit movement requests. They send periodic heartbeats to register their existence. 
-* **Communications**: Protobuf definitions defining the strictly enforced gRPC contracts between the World, Robots, and Visualiser.
+* **World Engine (Go/gRPC)**: The central authority. It simulates the 2D plane, generates boundary obstacles, processes robot intents (movement), and provides restricted, "faked" localized sensor data and simulated network constraint conditions to individual robots based on a max communication range of 250 units.
+* **Robots (Go/gRPC)**: Independent agents running individual control loops. They query the World Engine for sensor data/obstacles and submit movement requests. They send periodic heartbeats to register their existence. Additionally, they host a local P2P gRPC server to communicate directly with peers, actively enacting simulated constraints like packet drop rates, bandwidth wait times, and physical latencies.
+* **Communications**: Protobuf definitions defining the strictly enforced gRPC contracts between the World, Robots, and Visualiser, including the `PeerService` for inter-robot communication.
 * **Visualiser (Go/React/PixiJS)**: A high-performance web dashboard. It utilizes a **Backend-for-Frontend (BFF)** architecture where a Go proxy subscribes to the World Engine via gRPC and streams environment limits, obstacles, and robot telemetry to a Vite+React web UI over WebSockets.
 
 ## Prerequisites
