@@ -128,7 +128,7 @@ func (r *Robot) tick(ctx context.Context) {
 
 					_, err = peerClient.SyncData(syncCtx, &pb.PeerSyncRequest{
 						SenderId: r.ID,
-						Payload:  []byte{1}, // dummy payload but we pretended it was 1MB above
+						Payload:  []byte{1}, // minimal payload; transfer delay already simulated above
 					})
 					if err != nil {
 						log.Printf("[P2P Error] %s -> %s: %v", r.ID, tID, err)
