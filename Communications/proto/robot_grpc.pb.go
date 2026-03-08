@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0--rc2
-// source: proto/robot.proto
+// source: robot.proto
 
 package communications
 
@@ -239,5 +239,111 @@ var RobotService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/robot.proto",
+	Metadata: "robot.proto",
+}
+
+const (
+	PeerService_SyncData_FullMethodName = "/swarm.PeerService/SyncData"
+)
+
+// PeerServiceClient is the client API for PeerService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// PeerService is hosted by the robots to communicate heavily constrained data with neighbors
+type PeerServiceClient interface {
+	SyncData(ctx context.Context, in *PeerSyncRequest, opts ...grpc.CallOption) (*PeerSyncResponse, error)
+}
+
+type peerServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewPeerServiceClient(cc grpc.ClientConnInterface) PeerServiceClient {
+	return &peerServiceClient{cc}
+}
+
+func (c *peerServiceClient) SyncData(ctx context.Context, in *PeerSyncRequest, opts ...grpc.CallOption) (*PeerSyncResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PeerSyncResponse)
+	err := c.cc.Invoke(ctx, PeerService_SyncData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PeerServiceServer is the server API for PeerService service.
+// All implementations must embed UnimplementedPeerServiceServer
+// for forward compatibility.
+//
+// PeerService is hosted by the robots to communicate heavily constrained data with neighbors
+type PeerServiceServer interface {
+	SyncData(context.Context, *PeerSyncRequest) (*PeerSyncResponse, error)
+	mustEmbedUnimplementedPeerServiceServer()
+}
+
+// UnimplementedPeerServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedPeerServiceServer struct{}
+
+func (UnimplementedPeerServiceServer) SyncData(context.Context, *PeerSyncRequest) (*PeerSyncResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncData not implemented")
+}
+func (UnimplementedPeerServiceServer) mustEmbedUnimplementedPeerServiceServer() {}
+func (UnimplementedPeerServiceServer) testEmbeddedByValue()                     {}
+
+// UnsafePeerServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PeerServiceServer will
+// result in compilation errors.
+type UnsafePeerServiceServer interface {
+	mustEmbedUnimplementedPeerServiceServer()
+}
+
+func RegisterPeerServiceServer(s grpc.ServiceRegistrar, srv PeerServiceServer) {
+	// If the following call panics, it indicates UnimplementedPeerServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&PeerService_ServiceDesc, srv)
+}
+
+func _PeerService_SyncData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PeerSyncRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PeerServiceServer).SyncData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PeerService_SyncData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PeerServiceServer).SyncData(ctx, req.(*PeerSyncRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// PeerService_ServiceDesc is the grpc.ServiceDesc for PeerService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var PeerService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "swarm.PeerService",
+	HandlerType: (*PeerServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SyncData",
+			Handler:    _PeerService_SyncData_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "robot.proto",
 }

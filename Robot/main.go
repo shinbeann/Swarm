@@ -10,11 +10,21 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"net"
 
 	pb "github.com/yihre/swarm-project/communications/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+type peerServer struct {
+	pb.UnimplementedPeerServiceServer
+}
+
+func (s *peerServer) SyncData(ctx context.Context, req *pb.PeerSyncRequest) (*pb.PeerSyncResponse, error) {
+	log.Printf("[P2P Recv] Robot %s received sync from %s", *robotID, req.GetSenderId())
+	return &pb.PeerSyncResponse{Received: true}, nil
+}
 
 var (
 	worldEngineAddr = flag.String("world-engine", "world-engine:50051", "The address of the WorldEngine gRPC server")
@@ -52,6 +62,20 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
+	// Start Peer gRPC server
+	lis, err := net.Listen("tcp", ":50052")
+	if err != nil {
+		log.Fatalf("failed to listen for peer connections: %v", err)
+	}
+	peerSrv := grpc.NewServer()
+	pb.RegisterPeerServiceServer(peerSrv, &peerServer{})
+	go func() {
+		log.Printf("Starting Peer server on :50052...")
+		if err := peerSrv.Serve(lis); err != nil {
+			log.Fatalf("failed to serve peer server: %v", err)
+		}
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -60,9 +84,11 @@ func main() {
 	posY := rand.Float64() * 600
 	head := rand.Float64() * 2 * 3.14159
 
+	lastSync := time.Now()
+
 	// Control loop
 	go func() {
-		ticker := time.NewTicker(30 * time.Millisecond) // Move 10 times a second
+		ticker := time.NewTicker(30 * time.Millisecond) // Move ~33 times a second
 		defer ticker.Stop()
 
 		for {
@@ -70,16 +96,17 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				runControlLoop(ctx, client, &posX, &posY, &head)
+				runControlLoop(ctx, client, &posX, &posY, &head, &lastSync)
 			}
 		}
 	}()
 
 	<-sigCh
 	log.Println("Shutting down robot...")
+	peerSrv.GracefulStop()
 }
 
-func runControlLoop(ctx context.Context, client pb.RobotServiceClient, x, y, heading *float64) {
+func runControlLoop(ctx context.Context, client pb.RobotServiceClient, x, y, heading *float64, lastSync *time.Time) {
 	// Send heartbeat
 	_, err := client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
 		RobotId: *robotID,
@@ -115,7 +142,61 @@ func runControlLoop(ctx context.Context, client pb.RobotServiceClient, x, y, hea
 	// log.Printf("Received sensor data for %d objects", len(sensorResp.GetObjects()))
 
 	// Note: Implement robot logic based on sensor data here.
-	// Communicate with other robots, etc.
+	
+	// Network Sync (Every 2 seconds)
+	if time.Since(*lastSync) > 2*time.Second {
+		*lastSync = time.Now()
+
+		netResp, err := client.GetNetworkData(ctx, &pb.NetworkRequest{RobotId: *robotID})
+		if err != nil {
+			log.Printf("could not get network data: %v", err)
+		} else {
+			for _, cond := range netResp.GetNetworkConditions() {
+				targetID := cond.GetTargetRobotId()
+				latency := cond.GetLatency()
+				bandwidth := cond.GetBandwidth()
+				reliability := cond.GetReliability()
+
+				go func(tID string, lat, bw, rel float64) {
+					// 1. Reliability (Packet Loss)
+					if rand.Float64() > rel {
+						log.Printf("[P2P Send] Packet from %s to %s DROP (Reliability: %.2f)", *robotID, tID, rel)
+						return
+					}
+
+					// Simulated Payload of 1MB (8 Megabits)
+					payloadSizeMB := 1.0
+					transferTimeSec := (payloadSizeMB * 8.0) / bw 
+					transferTimeMs := transferTimeSec * 1000.0
+					totalDelayMs := lat + transferTimeMs
+
+					log.Printf("[P2P Send] %s -> %s (Delay: %.0fms, BW: %.1fMbps)", *robotID, tID, totalDelayMs, bw)
+
+					// 2. Latency + Transfer Delay
+					time.Sleep(time.Duration(totalDelayMs) * time.Millisecond)
+
+					peerAddr := tID + ":50052"
+					conn, err := grpc.NewClient(peerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+					if err != nil {
+						return
+					}
+					defer conn.Close()
+
+					peerClient := pb.NewPeerServiceClient(conn)
+					syncCtx, syncCancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer syncCancel()
+
+					_, err = peerClient.SyncData(syncCtx, &pb.PeerSyncRequest{
+						SenderId: *robotID,
+						Payload:  []byte{1}, // dummy payload but we pretended it was 1MB above
+					})
+					if err != nil {
+						log.Printf("[P2P Error] %s -> %s: %v", *robotID, tID, err)
+					}
+				}(targetID, latency, bandwidth, reliability)
+			}
+		}
+	}
 
 	// Generate random movement intent (direction vector)
 	// Bias it slightly towards the current heading so it doesn't just jitter in place

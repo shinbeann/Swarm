@@ -67,3 +67,16 @@ message HeartbeatResponse {
   bool success = 1;
 }
 
+// PeerService is hosted by the robots to communicate heavily constrained data with neighbors
+service PeerService {
+  rpc SyncData(PeerSyncRequest) returns (PeerSyncResponse);
+}
+
+message PeerSyncRequest {
+  string sender_id = 1;
+  bytes payload = 2; // For simulating large payloads (e.g. map sync)
+}
+
+message PeerSyncResponse {
+  bool received = 1;
+}

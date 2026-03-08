@@ -125,8 +125,49 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 }
 
 func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*pb.NetworkResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	reqRobotID := req.GetRobotId()
+	reqState, exists := s.robots[reqRobotID]
+	if !exists {
+		return &pb.NetworkResponse{NetworkConditions: []*pb.NetworkData{}}, nil
+	}
+
+	var conditions []*pb.NetworkData
+	maxRange := 250.0
+
+	for id, state := range s.robots {
+		if id == reqRobotID {
+			continue // Skip self
+		}
+
+		distX := reqState.Info.X - state.Info.X
+		distY := reqState.Info.Y - state.Info.Y
+		distance := math.Sqrt(distX*distX + distY*distY)
+
+		if distance <= maxRange {
+			// Calculate degradation based on distance ratio (0.0 to 1.0)
+			ratio := distance / maxRange
+
+			// Bandwidth: 50.0 to 1.0 Mbps
+			bandwidth := 50.0 - (49.0 * ratio)
+			// Latency: 5.0 to 250.0 ms
+			latency := 5.0 + (245.0 * ratio)
+			// Reliability: 1.0 to 0.5
+			reliability := 1.0 - (0.5 * ratio)
+
+			conditions = append(conditions, &pb.NetworkData{
+				TargetRobotId: id,
+				Bandwidth:     bandwidth,
+				Latency:       latency,
+				Reliability:   reliability,
+			})
+		}
+	}
+
 	return &pb.NetworkResponse{
-		NetworkConditions: []*pb.NetworkData{},
+		NetworkConditions: conditions,
 	}, nil
 }
 
