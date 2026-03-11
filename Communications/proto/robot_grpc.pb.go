@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0--rc2
-// source: Communications/proto/robot.proto
+// source: proto/robot.proto
 
 package communications
 
@@ -29,7 +29,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type RobotServiceClient interface {
-	// robot signifies an intention to move to a position or along a direction vector with a velocity.
+	// robot requests to move to an absolute target position with a desired final orientation.
+	// The WorldEngine moves the robot toward the target over time and has final authority over the actual position.
 	MoveToPosition(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (*MoveResponse, error)
 	// robot requests for sensor data from the world.
 	GetSensorData(ctx context.Context, in *SensorRequest, opts ...grpc.CallOption) (*SensorResponse, error)
@@ -91,7 +92,8 @@ func (c *robotServiceClient) SendHeartbeat(ctx context.Context, in *HeartbeatReq
 // All implementations must embed UnimplementedRobotServiceServer
 // for forward compatibility.
 type RobotServiceServer interface {
-	// robot signifies an intention to move to a position or along a direction vector with a velocity.
+	// robot requests to move to an absolute target position with a desired final orientation.
+	// The WorldEngine moves the robot toward the target over time and has final authority over the actual position.
 	MoveToPosition(context.Context, *MoveRequest) (*MoveResponse, error)
 	// robot requests for sensor data from the world.
 	GetSensorData(context.Context, *SensorRequest) (*SensorResponse, error)
@@ -239,7 +241,7 @@ var RobotService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "Communications/proto/robot.proto",
+	Metadata: "proto/robot.proto",
 }
 
 const (
@@ -345,5 +347,5 @@ var PeerService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "Communications/proto/robot.proto",
+	Metadata: "proto/robot.proto",
 }

@@ -17,7 +17,7 @@ This document serves as the high-level overview of the `SwarmProject` directory 
 | :--- | :--- |
 | **Communications** | API contracts. Defines standard gRPC services (`RobotService`, `VisualiserService`, `PeerService`). |
 | **Robot** | Agent-level decision-making. Consumes data from the world and attempts peer-to-peer data sync under network constraints. |
-| **World Engine** | Simulation arbitration. Validates movement, mocks object proximities, and calculates communication decay metrics based on Euclidean distance. |
+| **WorldEngine** | Simulation arbitration. Owns all robot positions, advances robots toward their requested targets every 30 ms, validates wall collisions, mocks object proximities, and calculates communication decay metrics based on Euclidean distance. |
 | **Visualiser** | Observation. Subscribes to environment and robot data from the World Engine without interfering in simulation physics. |
 
 ## Internal Dependency Map (Go)
@@ -36,11 +36,11 @@ graph TD
 
 | Component | Loop / Timer | Interval | Notes |
 | :--- | :--- | :--- | :--- |
-| **Robot** | Control loop ticker | **30 ms (~33 Hz)** | Managed within `Robot.Run`. Each tick: `SendHeartbeat` → `GetSensorData` → `MoveToPosition`. |
+| **Robot** | Heartbeat ticker | **30 ms (~33 Hz)** | Each tick: `SendHeartbeat` (reads canonical X/Y/Heading from response) → `GetSensorData` (stores nearest obstacle direction). Robot holds no local physics. |
+| **Robot** | Movement ticker | **Every 2 s** | `MoveToPosition` with absolute target `(X, Y)` + `desired_heading`. Target is chosen 100–300 units away; biased away from last sensed obstacle if one was within 5 units. |
 | **Robot** | P2P network sync | **Every 2 s** | `GetNetworkData` → goroutine per peer dispatching simulated `SyncData` (including `LamportClock`). |
+| **WorldEngine** | Physics simulation tick | **Every 30 ms** | Advances every robot with an active target by `50 units/sec × 0.03 s = 1.5 units`. Snaps to target on arrival; stops and clears target on wall contact. |
 | **WorldEngine** | Stale-robot cleanup | **Every 2 s** | Removes robots whose `LastSeen` exceeds **5 s** from the registry. |
-
-> **Known inconsistency**: `Robot/robot.go` applies a hardcoded `0.2 s` time-delta to velocity (5 FPS equivalent) inside a 33 Hz control loop. Movement speed in the world is therefore **~6.6× faster** than intended. This should be corrected when implementing proper kinematics (use `time.Since(lastTick)` instead of a fixed delta).
 
 ## Architecture Decision Records
 

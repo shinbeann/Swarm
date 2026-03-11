@@ -21,6 +21,10 @@ type Robot struct {
 	Client   pb.RobotServiceClient
 	Clock    *LamportClock
 	lastSync time.Time
+
+	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true
+	nearObstacle  bool
+	obstacleAngle float64
 }
 
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
@@ -36,15 +40,19 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 }
 
 func (r *Robot) Run(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Millisecond) // Move ~33 times a second
-	defer ticker.Stop()
+	heartbeatTicker := time.NewTicker(30 * time.Millisecond)
+	moveTicker := time.NewTicker(2 * time.Second)
+	defer heartbeatTicker.Stop()
+	defer moveTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-heartbeatTicker.C:
 			r.tick(ctx)
+		case <-moveTicker.C:
+			r.requestMovement(ctx)
 		}
 	}
 }
@@ -52,7 +60,7 @@ func (r *Robot) Run(ctx context.Context) {
 func (r *Robot) tick(ctx context.Context) {
 	r.Clock.Tick()
 
-	// Heartbeat
+	// Heartbeat — WorldEngine returns the canonical position
 	heartbeatResp, err := r.Client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
 		RobotId: r.ID,
 		X:       r.X,
@@ -61,59 +69,69 @@ func (r *Robot) tick(ctx context.Context) {
 	})
 	if err != nil {
 		log.Printf("heartbeat error: %v", err)
-	} else if heartbeatResp != nil {
-		// Optional: update clock if world returns a clock value, 
-		// but the proto currently doesn't seem to have it in HeartbeatResponse.
+	} else if heartbeatResp != nil && heartbeatResp.GetSuccess() {
+		// Sync local position mirror from the authoritative WorldEngine state
+		r.X = heartbeatResp.GetX()
+		r.Y = heartbeatResp.GetY()
+		r.Heading = heartbeatResp.GetHeading()
 	}
 
-	// Sensor
+	// Sensor — detect nearby obstacles; result is used by requestMovement
 	sensorResp, err := r.Client.GetSensorData(ctx, &pb.SensorRequest{RobotId: r.ID})
 	if err != nil {
 		return
 	}
 
-	obstacleDetected := false
+	r.nearObstacle = false
 	for _, obj := range sensorResp.GetObjects() {
 		if obj.GetType() == "obstacle" {
 			distX := obj.GetX() - r.X
 			distY := obj.GetY() - r.Y
 			dist := math.Sqrt(distX*distX + distY*distY)
 			if dist <= 5.0 {
-				obstacleDetected = true
+				r.nearObstacle = true
+				r.obstacleAngle = math.Atan2(distY, distX)
 				break
 			}
 		}
 	}
 
-	angleRange := 0.5
-	newHeading := r.Heading + (rand.Float64()*angleRange - angleRange/2.0)
-
-	if obstacleDetected {
-		newHeading += math.Pi
-	}
-
-	dirX := math.Cos(newHeading)
-	dirY := math.Sin(newHeading)
-	velocity := 50.0
-
-	_, _ = r.Client.MoveToPosition(ctx, &pb.MoveRequest{
-		RobotId:  r.ID,
-		X:        dirX,
-		Y:        dirY,
-		Velocity: velocity * 0.2,
-	})
-
-	r.X += dirX * (velocity * 0.2)
-	r.Y += dirY * (velocity * 0.2)
-	r.Heading = newHeading
-
-	r.X = math.Max(0, math.Min(1000, r.X))
-	r.Y = math.Max(0, math.Min(1000, r.Y))
-
 	// P2P Sync (Every 2 seconds)
 	if time.Since(r.lastSync) > 2*time.Second {
 		r.lastSync = time.Now()
 		r.syncWithPeers(ctx)
+	}
+}
+
+// requestMovement picks a target position and asks the WorldEngine to move the robot there.
+// The WorldEngine has full authority over the actual path and final position.
+func (r *Robot) requestMovement(ctx context.Context) {
+	// Pick a random target 100–300 units away
+	distance := 100.0 + rand.Float64()*200.0
+	angle := rand.Float64() * 2 * math.Pi
+
+	if r.nearObstacle {
+		// Aim away from the detected obstacle with a small random spread
+		angle = r.obstacleAngle + math.Pi + (rand.Float64()*0.5 - 0.25)
+	}
+
+	targetX := r.X + math.Cos(angle)*distance
+	targetY := r.Y + math.Sin(angle)*distance
+
+	// Keep well clear of boundary walls
+	targetX = math.Max(50, math.Min(950, targetX))
+	targetY = math.Max(50, math.Min(950, targetY))
+
+	desiredHeading := math.Atan2(targetY-r.Y, targetX-r.X)
+
+	_, err := r.Client.MoveToPosition(ctx, &pb.MoveRequest{
+		RobotId:        r.ID,
+		TargetX:        targetX,
+		TargetY:        targetY,
+		DesiredHeading: desiredHeading,
+	})
+	if err != nil {
+		log.Printf("move request error: %v", err)
 	}
 }
 

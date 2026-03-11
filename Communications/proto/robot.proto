@@ -4,7 +4,8 @@ package swarm;
 option go_package = "github.com/yihre/swarm-project/communications;communications";
 
 service RobotService {
-  // robot signifies an intention to move to a position or along a direction vector with a velocity.
+  // robot requests to move to an absolute target position with a desired final orientation.
+  // The WorldEngine moves the robot toward the target over time and has final authority over the actual position.
   rpc MoveToPosition(MoveRequest) returns (MoveResponse);
   // robot requests for sensor data from the world.
   rpc GetSensorData(SensorRequest) returns (SensorResponse);
@@ -16,10 +17,11 @@ service RobotService {
 
 message MoveRequest {
   string robot_id = 1;
-  // Position or direction
-  double x = 2;
-  double y = 3;
-  double velocity = 4;
+  // Absolute target position in world coordinates
+  double target_x = 2;
+  double target_y = 3;
+  // Desired heading (radians) when the robot arrives at the target
+  double desired_heading = 4;
 }
 
 message MoveResponse {
@@ -65,6 +67,10 @@ message HeartbeatRequest {
 
 message HeartbeatResponse {
   bool success = 1;
+  // Canonical position and heading as maintained by the WorldEngine
+  double x = 2;
+  double y = 3;
+  double heading = 4;
 }
 
 // PeerService is hosted by the robots to communicate heavily constrained data with neighbors

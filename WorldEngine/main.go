@@ -21,10 +21,22 @@ var (
 	port = flag.String("port", "50051", "The server port")
 )
 
-// RobotState tracks the last known info and heartbeat for a robot
+const (
+	robotSpeed = 50.0  // units per second
+	simTickMs  = 30   // simulation tick in milliseconds
+	simDt      = simTickMs / 1000.0 // seconds per tick
+)
+
+// RobotState tracks the canonical position and movement target for a robot.
 type RobotState struct {
 	Info     *pb.RobotInfo
 	LastSeen time.Time
+
+	// Current movement target set by the robot
+	HasTarget     bool
+	TargetX       float64
+	TargetY       float64
+	TargetHeading float64
 }
 
 // server is used to implement both RobotService and VisualiserService.
@@ -44,28 +56,18 @@ func (s *server) MoveToPosition(ctx context.Context, req *pb.MoveRequest) (*pb.M
 
 	state, exists := s.robots[req.GetRobotId()]
 	if !exists {
-		return &pb.MoveResponse{Success: false}, nil // Robot not tracked yet
+		return &pb.MoveResponse{Success: false}, nil // Robot not yet registered via heartbeat
 	}
 
-	// Calculate new position based on direction vector and velocity
-	// Assume velocity is units per second, and this is called once per second
-	// Ensure velocity is capped for realism
-	velocity := math.Min(req.GetVelocity(), 50.0) // Max 50 units/sec
+	// Clamp target to world bounds
+	state.TargetX = math.Max(0, math.Min(1000, req.GetTargetX()))
+	state.TargetY = math.Max(0, math.Min(1000, req.GetTargetY()))
+	state.TargetHeading = req.GetDesiredHeading()
+	state.HasTarget = true
 
-	// Update position
-	state.Info.X += req.GetX() * velocity
-	state.Info.Y += req.GetY() * velocity
+	log.Printf("Robot %s new target: (%.1f, %.1f) heading %.2frad",
+		req.GetRobotId(), state.TargetX, state.TargetY, state.TargetHeading)
 
-	// Calculate new heading (in radians)
-	state.Info.Heading = math.Atan2(req.GetY(), req.GetX())
-
-	// Ensure bounds (0 to 1000)
-	state.Info.X = math.Max(0, math.Min(1000, state.Info.X))
-	state.Info.Y = math.Max(0, math.Min(1000, state.Info.Y))
-
-	state.LastSeen = time.Now()
-
-	// log.Printf("Robot %s moved to (%f, %f)", req.GetRobotId(), state.Info.X, state.Info.Y)
 	return &pb.MoveResponse{Success: true}, nil
 }
 
@@ -111,17 +113,30 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.robots[req.GetRobotId()] = &RobotState{
-		Info: &pb.RobotInfo{
-			Id:      req.GetRobotId(),
-			X:       req.GetX(),
-			Y:       req.GetY(),
-			Heading: req.GetHeading(),
-		},
-		LastSeen: time.Now(),
+	state, exists := s.robots[req.GetRobotId()]
+	if !exists {
+		// First heartbeat: seed initial position from robot's reported spawn location
+		state = &RobotState{
+			Info: &pb.RobotInfo{
+				Id:      req.GetRobotId(),
+				X:       math.Max(0, math.Min(1000, req.GetX())),
+				Y:       math.Max(0, math.Min(1000, req.GetY())),
+				Heading: req.GetHeading(),
+			},
+		}
+		s.robots[req.GetRobotId()] = state
+		log.Printf("Robot %s registered at (%.1f, %.1f)", req.GetRobotId(), state.Info.X, state.Info.Y)
 	}
 
-	return &pb.HeartbeatResponse{Success: true}, nil
+	// Always refresh LastSeen; the WorldEngine owns X/Y/Heading after initial registration
+	state.LastSeen = time.Now()
+
+	return &pb.HeartbeatResponse{
+		Success: true,
+		X:       state.Info.X,
+		Y:       state.Info.Y,
+		Heading: state.Info.Heading,
+	}, nil
 }
 
 func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*pb.NetworkResponse, error) {
@@ -215,6 +230,47 @@ func main() {
 		},
 	}
 
+	// Simulation tick: step every robot toward its target at robotSpeed units/sec
+	go func() {
+		ticker := time.NewTicker(simTickMs * time.Millisecond)
+		for range ticker.C {
+			srv.mu.Lock()
+			for _, state := range srv.robots {
+				if !state.HasTarget {
+					continue
+				}
+				dx := state.TargetX - state.Info.X
+				dy := state.TargetY - state.Info.Y
+				dist := math.Sqrt(dx*dx + dy*dy)
+				step := robotSpeed * simDt
+				if dist <= step {
+					// Close enough — snap to target
+					state.Info.X = state.TargetX
+					state.Info.Y = state.TargetY
+					state.Info.Heading = state.TargetHeading
+					state.HasTarget = false
+				} else {
+					// Advance one step along the vector toward target
+					ratio := step / dist
+					newX := state.Info.X + dx*ratio
+					newY := state.Info.Y + dy*ratio
+					// Wall collision: clamp and cancel target if boundary reached
+					newX = math.Max(0, math.Min(1000, newX))
+					newY = math.Max(0, math.Min(1000, newY))
+					if newX != state.Info.X+dx*ratio || newY != state.Info.Y+dy*ratio {
+						// Robot hit a boundary wall — stop here
+						state.HasTarget = false
+					}
+					state.Info.X = newX
+					state.Info.Y = newY
+					state.Info.Heading = math.Atan2(dy, dx)
+				}
+			}
+			srv.mu.Unlock()
+		}
+	}()
+
+	// Cleanup tick: remove robots that have stopped sending heartbeats
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		for range ticker.C {
