@@ -1,3 +1,5 @@
+# Objective of the Project
+
 This project builds a 2d simulation of a robot swarm performing a search and rescue mission in a disaster area. The robots are meant to communicate information with each other, map out the area and find survivors.  
 
 The purpose is to implement distributed computing concepts between the robots, with the rest of the simulator being a way to visualize the swarm and its behaviour as a result of the distributed computing concepts. The intention is to make the rest of the simulator as simple as possible, so that the focus is on the distributed computing concepts.  
@@ -8,13 +10,13 @@ The project is split into the following major subprojects:
 * World: serves as the central authority for the simulation.  
 * Visualiser: receives data from the world and visualizes them. It uses a Backend-for-Frontend (BFF) architecture, with a Go proxy translating gRPC streams to WebSockets for a web-based React/PixiJS frontend.
 
-# Architecture
+# Architecture Idea
 
 [View Detailed Codebase & Dependency Map](CODEBASE_MAP.md)
 
 The robots and the world engine are a hub and spoke model. The world serves as the source of truth for all physics, sensor and network data of the robots.  
 
-As part of the control loop, robots will send a request for movement based on a position or director vector with velocity. The world will then update the robot's position and heading based on this request.  
+As part of the control loop, robots send a movement request specifying an absolute target position `(X, Y)` and a desired final heading. The WorldEngine steps each robot toward that target over time at a fixed speed (50 units/sec), handles wall collisions, and returns the robot's canonical position in every `HeartbeatResponse`. The robot reads its own position exclusively from these responses — it holds no independent physics of its own.  
 
 The sensors of the robot are "faked", in the sense that we will not be using any emulation of real sensor behaviour. Instead, the world will provide the robots with the data that they would receive from their sensors. E.g. if the robot requests for sensor data, the world engine finds all the objects that are within the robot's sensor radius and returns them.  
 
@@ -32,7 +34,7 @@ This subproject should have the .proto files for the gRPC service and messages.
 
 Specifically, there should be the following services:
 * RobotService: used for communication between world and robot, with the world as the server and the robots as the clients.  
-    * MoveToPosition: robot signifies an intention to move to a position or along a direction vector with a velocity.  
+    * MoveToPosition: robot submits an absolute target position `(target_x, target_y)` plus a `desired_heading` (the orientation it wants when it arrives). The WorldEngine queues this as the robot's active movement goal.  
     * GetSensorData: robot requests for sensor data from the world.  
     * GetNetworkData: robot requests for network data from the world.  
     * SendHeartbeat: robot sends a heartbeat to the world to indicate that it is still alive.  
@@ -41,8 +43,6 @@ Specifically, there should be the following services:
     * GetRobotData: visualiser requests for robot data relevant to the visualiser from the world.
 * PeerService: used for peer-to-peer communication directly between robots.
     * SyncData: robot sends a synchronization payload to a neighboring robot, which is subjected to the simulated network conditions.
-
-Note that the grpc implementations of these messages and services should be put into the respective subprojects.  
 
 ### Environment definitions
 The environment defines a coordinate space starting from 0,0, up to a defined boundary.
@@ -97,8 +97,10 @@ Major technical and design decisions are tracked in `docs/adr/`:
 
 The following features are implemented and running in the current Docker Compose cluster:
 
-- **Robot control loop**: Runs at **30ms intervals (~33 Hz)**, encapsulated in the `Robot.Run` method. Each tick calls `SendHeartbeat`, `GetSensorData`, and `MoveToPosition` against the World Engine. The World Engine tracks robots in a registry, pruning any that miss heartbeats for 5+ seconds (checked every 2s by a cleanup ticker).
-- **Random movement with avoidance**: Robots drift randomly with a slight heading bias. If `GetSensorData` returns an obstacle within 5 units, the robot reverses its heading by π radians.
+- **Robot control loop**: Runs on two independent tickers:
+  - **30 ms heartbeat ticker (~33 Hz)**: calls `SendHeartbeat` (receives canonical position back), `GetSensorData`, and — every 2 s — triggers the P2P sync. The robot's local `X/Y/Heading` are updated exclusively from the `HeartbeatResponse`; the robot performs no local physics.
+  - **2 s movement ticker**: calls `MoveToPosition` with an absolute target position and desired final heading. Target is chosen randomly 100–300 units ahead; if an obstacle was recently sensed within 5 units, the target is biased π radians away.
+- **WorldEngine physics authority**: The WorldEngine owns all robot positions. On each 30 ms simulation tick it steps every robot toward its active target at 50 units/sec (~1.5 units/step). On wall contact the robot halts and its target is cleared. `SendHeartbeat` only seeds a robot's initial position on first contact; all subsequent heartbeats only refresh `LastSeen`.
 - **Boundary walls**: The World Engine spawns four rectangular walls at the edges of the 1000×1000 world at startup.
 - **Visualiser dashboard**: The React+PixiJS UI renders environment boundary, obstacles (red fill), and robots (green triangles) in real-time via WebSocket.
 - **Simulated network constraints**: The World Engine's `GetNetworkData` calculates per-robot peer conditions based on Euclidean distance. Max communication range is `250.0` units with linear degradation of bandwidth (50→1 Mbps), latency (5→250 ms), and reliability (1.0→0.5).
