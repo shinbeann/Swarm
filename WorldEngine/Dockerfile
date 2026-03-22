@@ -2,23 +2,29 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# We need to copy both the worldengine and communications modules because worldengine depends on communications
-COPY Communications /app/Communications
-COPY WorldEngine /app/WorldEngine
+# Copy all source code first
+COPY Communications/ ./Communications/
+COPY WorldEngine/ ./WorldEngine/
 
+# Copy dependency files from WorldEngine
 WORKDIR /app/WorldEngine
+COPY WorldEngine/go.mod* ./
+COPY WorldEngine/go.sum* ./
 
-# Download dependencies and build
+# Download dependencies
 RUN go mod download
-RUN go build -o /worldengine-bin main.go
 
+# Build the WorldEngine binary
+RUN go build -o /worldengine-bin .
+
+# Final stage
 FROM alpine:latest
 
-WORKDIR /app
+WORKDIR /root/
 
-COPY --from=builder /worldengine-bin /app/worldengine-bin
+# Copy binary from builder
+COPY --from=builder /worldengine-bin .
 
-# Expose gRPC port
 EXPOSE 50051
 
-ENTRYPOINT ["/app/worldengine-bin"]
+CMD ["./worldengine-bin"]

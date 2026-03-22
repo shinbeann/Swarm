@@ -1,2 +1,31 @@
 .agents/
+
+# Local binaries / downloaded tools
+bin/
+include/
+protoc.zip
 *.exe
+
+# Local environment/version manager files (machine-specific)
+.env
+.env.*
+.python-version
+.node-version
+.go-version
+.tool-versions
+go.work
+go.work.sum
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Build/cache files
+*.out
+*.test
+coverage.out
+__pycache__/
+*.pyc

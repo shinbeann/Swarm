@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	pb "github.com/yihre/swarm-project/communications/proto"
@@ -22,13 +25,18 @@ type Robot struct {
 	Clock    *LamportClock
 	lastSync time.Time
 
+	store              *KnowledgeStore
+	neighbours         *NeighbourRegistry
+	gossip             *GossipEngine
+	discoveredLandmarks map[LandmarkID]bool
+
 	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true
 	nearObstacle  bool
 	obstacleAngle float64
 }
 
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
-	return &Robot{
+	r := &Robot{
 		ID:       id,
 		X:        rand.Float64() * 800,
 		Y:        rand.Float64() * 600,
@@ -36,6 +44,19 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 		Client:   client,
 		Clock:    NewLamportClock(),
 		lastSync: time.Now(),
+		store:    NewKnowledgeStore(),
+		neighbours: NewNeighbourRegistry(3 * time.Second),
+		discoveredLandmarks: make(map[LandmarkID]bool),
+	}
+
+	r.gossip = NewGossipEngine(RobotID(r.ID), r.Clock, r.store, r.neighbours, r.sendGossipMessage)
+	r.gossip.Start()
+	return r
+}
+
+func (r *Robot) Stop() {
+	if r.gossip != nil {
+		r.gossip.Stop()
 	}
 }
 
@@ -94,6 +115,15 @@ func (r *Robot) tick(ctx context.Context) {
 				break
 			}
 		}
+
+		if strings.HasPrefix(obj.GetType(), "landmark:") {
+			id := LandmarkID(obj.GetId())
+			if !r.discoveredLandmarks[id] {
+				r.discoveredLandmarks[id] = true
+				ltype := LandmarkType(strings.TrimPrefix(obj.GetType(), "landmark:"))
+				r.gossip.RecordDiscovery(id, ltype, Location{X: obj.GetX(), Y: obj.GetY()})
+			}
+		}
 	}
 
 	// P2P Sync (Every 2 seconds)
@@ -144,6 +174,7 @@ func (r *Robot) syncWithPeers(ctx context.Context) {
 
 	for _, cond := range netResp.GetNetworkConditions() {
 		targetID := cond.GetTargetRobotId()
+		r.neighbours.RecordHeartbeat(RobotID(targetID))
 		latency := cond.GetLatency()
 		bandwidth := cond.GetBandwidth()
 		reliability := cond.GetReliability()
@@ -187,4 +218,45 @@ func (r *Robot) syncWithPeers(ctx context.Context) {
 			}
 		}(targetID, latency, bandwidth, reliability)
 	}
+}
+
+func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal gossip payload: %w", err)
+	}
+
+	peerAddr := string(to) + ":50052"
+	conn, err := grpc.NewClient(peerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("dial peer %s: %w", to, err)
+	}
+	defer conn.Close()
+
+	peerClient := pb.NewPeerServiceClient(conn)
+	syncCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err = peerClient.SyncData(syncCtx, &pb.PeerSyncRequest{
+		SenderId:     r.ID,
+		Payload:      payload,
+		LamportClock: int64(r.Clock.Time()),
+	})
+	if err != nil {
+		return fmt.Errorf("sync data to %s: %w", to, err)
+	}
+	return nil
+}
+
+func (r *Robot) OnPeerSync(req *pb.PeerSyncRequest) {
+	r.Clock.Update(int(req.GetLamportClock()))
+	r.neighbours.RecordHeartbeat(RobotID(req.GetSenderId()))
+
+	var msg GossipMessage
+	if err := json.Unmarshal(req.GetPayload(), &msg); err == nil {
+		r.gossip.OnReceive(&msg)
+		return
+	}
+
+	log.Printf("[P2P Recv] Robot %s received non-gossip payload from %s", r.ID, req.GetSenderId())
 }

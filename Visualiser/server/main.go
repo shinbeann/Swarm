@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -16,7 +17,7 @@ import (
 var (
 	worldEngineAddr = flag.String("world-engine", "world-engine:50051", "The address of the WorldEngine gRPC server")
 	port            = flag.String("port", "8080", "The server port")
-	staticDir       = flag.String("static-dir", "../ui/dist", "Directory of static web assets to serve")
+	staticDir       = flag.String("static-dir", "./ui/dist", "Directory of static web assets to serve")
 )
 
 var upgrader = websocket.Upgrader{
@@ -26,8 +27,14 @@ var upgrader = websocket.Upgrader{
 func main() {
 	flag.Parse()
 
-	log.Printf("Connecting to World Engine at %s...", *worldEngineAddr)
-	conn, err := grpc.NewClient(*worldEngineAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	target := *worldEngineAddr
+	if !strings.Contains(target, ":///") {
+		// Force DNS resolver for container hostnames such as "world-engine:50051".
+		target = "dns:///" + target
+	}
+
+	log.Printf("Connecting to World Engine at %s...", target)
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect to World Engine: %v", err)
 	}

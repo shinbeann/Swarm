@@ -21,6 +21,8 @@ services:
       - world-engine
     networks:
       - swarm-net
+    deploy:
+     replicas: 5
 
   visualiser:
     build:

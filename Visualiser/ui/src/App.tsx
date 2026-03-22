@@ -28,6 +28,8 @@ interface StatePayload {
     robots?: Robot[];
 }
 
+const LANDMARK_PREFIX = 'landmark:';
+
 function App() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const appRef = useRef<PIXI.Application | null>(null);
@@ -119,8 +121,11 @@ function App() {
         graphics.stroke({ width: 2, color: 0x444455 });
 
         if (environment.obstacles) {
-            graphics.fill(0xff3366, 0.5); // Danger rect for obstacles
-            environment.obstacles.forEach((obs) => {
+            const staticObstacles = environment.obstacles.filter((obs) => !obs.id.startsWith(LANDMARK_PREFIX));
+            const landmarks = environment.obstacles.filter((obs) => obs.id.startsWith(LANDMARK_PREFIX));
+
+            graphics.fill(0xff3366, 0.5); // Walls/obstacles
+            staticObstacles.forEach((obs) => {
                 graphics.rect(
                     obs.x * scaleX,
                     obs.y * scaleY,
@@ -129,6 +134,22 @@ function App() {
                 );
             });
             graphics.fill();
+
+            // Render landmarks as bright circles so they stand out from walls.
+            landmarks.forEach((lm) => {
+                const cx = (lm.x + lm.width / 2) * scaleX;
+                const cy = (lm.y + lm.height / 2) * scaleY;
+                const radius = Math.max(4, (lm.width * scaleX) / 2);
+
+                let color = 0xffcc00; // default landmark color
+                if (lm.id.includes(':casualty')) color = 0x00e5ff;
+                if (lm.id.includes(':corridor')) color = 0x7dff6d;
+                if (lm.id.includes(':obstacle')) color = 0xffa347;
+
+                graphics.circle(cx, cy, radius);
+                graphics.fill({ color, alpha: 0.95 });
+                graphics.stroke({ width: 1.5, color: 0x111116, alpha: 0.8 });
+            });
         }
     };
 

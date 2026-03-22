@@ -16,9 +16,13 @@ import (
 
 type peerServer struct {
 	pb.UnimplementedPeerServiceServer
+	robot *Robot
 }
 
 func (s *peerServer) SyncData(ctx context.Context, req *pb.PeerSyncRequest) (*pb.PeerSyncResponse, error) {
+	if s.robot != nil {
+		s.robot.OnPeerSync(req)
+	}
 	log.Printf("[P2P Recv] Robot %s received sync from %s", *robotID, req.GetSenderId())
 	return &pb.PeerSyncResponse{Received: true}, nil
 }
@@ -59,13 +63,15 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
+	robot := NewRobot(*robotID, client)
+
 	// Start Peer gRPC server
 	lis, err := net.Listen("tcp", ":50052")
 	if err != nil {
 		log.Fatalf("failed to listen for peer connections: %v", err)
 	}
 	peerSrv := grpc.NewServer()
-	pb.RegisterPeerServiceServer(peerSrv, &peerServer{})
+	pb.RegisterPeerServiceServer(peerSrv, &peerServer{robot: robot})
 	go func() {
 		log.Printf("Starting Peer server on :50052...")
 		if err := peerSrv.Serve(lis); err != nil {
@@ -76,12 +82,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	robot := NewRobot(*robotID, client)
-
 	// Control loop
 	go robot.Run(ctx)
 
 	<-sigCh
 	log.Println("Shutting down robot...")
+	robot.Stop()
 	peerSrv.GracefulStop()
 }

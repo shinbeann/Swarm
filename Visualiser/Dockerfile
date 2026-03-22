@@ -1,38 +1,36 @@
 FROM node:20-alpine AS ui-builder
 
-WORKDIR /ui
+WORKDIR /app
 
-COPY Visualiser/ui/package*.json ./
-RUN npm install
-
+# Copy UI source
 COPY Visualiser/ui ./
-RUN npm run build
 
+# Install dependencies and build
+RUN npm install && npm run build
 
-FROM golang:1.25-alpine AS server-builder
+# Build Go server
+FROM golang:1.25-alpine AS go-builder
 
 WORKDIR /app
 
-# We need Communications and Visualiser modules
-COPY Communications /app/Communications
-COPY Visualiser /app/Visualiser
+# Copy all source code
+COPY . .
 
+# Build the Visualiser binary
 WORKDIR /app/Visualiser/server
-RUN go mod download
-RUN go build -o /visualiser-bin main.go
+RUN go build -o /visualiser-bin .
 
-
+# Final runtime stage
 FROM alpine:latest
 
-WORKDIR /app
+WORKDIR /root/
 
-# Copy the server binary
-COPY --from=server-builder /visualiser-bin /app/visualiser-bin
+# Copy binary from Go builder
+COPY --from=go-builder /visualiser-bin .
 
-# Copy the built UI assets
-COPY --from=ui-builder /ui/dist /app/ui/dist
+# Copy UI dist folder from UI builder
+COPY --from=ui-builder /app/dist ./ui/dist
 
-# Expose combined port
 EXPOSE 8080
 
-ENTRYPOINT ["/app/visualiser-bin", "--static-dir=/app/ui/dist"]
+ENTRYPOINT ["./visualiser-bin"]
