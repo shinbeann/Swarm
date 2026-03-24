@@ -19,6 +19,11 @@ type peerServer struct {
 	robot *Robot
 }
 
+type raftServer struct {
+	pb.UnimplementedRaftServiceServer
+	robot *Robot
+}
+
 func (s *peerServer) SyncData(ctx context.Context, req *pb.PeerSyncRequest) (*pb.PeerSyncResponse, error) {
 	if s.robot != nil {
 		s.robot.OnPeerSync(req)
@@ -27,9 +32,24 @@ func (s *peerServer) SyncData(ctx context.Context, req *pb.PeerSyncRequest) (*pb
 	return &pb.PeerSyncResponse{Received: true}, nil
 }
 
+func (s *raftServer) RequestVote(ctx context.Context, req *pb.VoteRequest) (*pb.VoteResponse, error) {
+	if s.robot == nil {
+		return &pb.VoteResponse{}, nil
+	}
+	return s.robot.HandleRequestVote(req), nil
+}
+
+func (s *raftServer) AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
+	if s.robot == nil {
+		return &pb.AppendEntriesResponse{}, nil
+	}
+	return s.robot.HandleAppendEntries(req), nil
+}
+
 var (
 	worldEngineAddr = flag.String("world-engine", "world-engine:50051", "The address of the WorldEngine gRPC server")
 	robotID         = flag.String("id", os.Getenv("ROBOT_ID"), "The unique ID for this robot")
+	raftAddr        = flag.String("raft-addr", ":50053", "gRPC address for dedicated Raft service")
 )
 
 func main() {
@@ -79,6 +99,19 @@ func main() {
 		}
 	}()
 
+	raftLis, err := net.Listen("tcp", *raftAddr)
+	if err != nil {
+		log.Fatalf("failed to listen for raft connections: %v", err)
+	}
+	raftSrv := grpc.NewServer()
+	pb.RegisterRaftServiceServer(raftSrv, &raftServer{robot: robot})
+	go func() {
+		log.Printf("Starting Raft server on %s...", *raftAddr)
+		if err := raftSrv.Serve(raftLis); err != nil {
+			log.Fatalf("failed to serve raft server: %v", err)
+		}
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -88,5 +121,6 @@ func main() {
 	<-sigCh
 	log.Println("Shutting down robot...")
 	robot.Stop()
+	raftSrv.GracefulStop()
 	peerSrv.GracefulStop()
 }
