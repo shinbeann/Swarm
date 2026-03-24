@@ -7,6 +7,8 @@ import (
 	pb "github.com/yihre/swarm-project/communications/proto"
 )
 
+const forcedElectionTimeoutDuration = 20 * time.Second
+
 func buildConditions(self string, peers ...string) []*pb.NetworkData {
 	conds := make([]*pb.NetworkData, 0, len(peers))
 	for _, p := range peers {
@@ -25,7 +27,7 @@ func buildConditions(self string, peers ...string) []*pb.NetworkData {
 
 func forceElectionTimeout(r *Robot) {
 	r.mu.Lock()
-	r.lastLeaderSeenAt = time.Now().Add(-20 * time.Second)
+	r.lastLeaderSeenAt = time.Now().Add(-forcedElectionTimeoutDuration)
 	r.electionTimeout = time.Millisecond
 	r.mu.Unlock()
 }

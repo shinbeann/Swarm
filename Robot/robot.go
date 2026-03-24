@@ -30,6 +30,8 @@ const (
 	raftElectionMinTimeout = 4 * time.Second
 	raftElectionJitter     = 3 * time.Second
 	raftSyncInterval       = 250 * time.Millisecond
+	gossipPayloadMb        = 1.0   // Simulated gossip sync payload size.
+	raftPayloadMb          = 0.001 // Small control-plane Raft RPC payload size approximation.
 )
 
 type RaftLogEntry struct {
@@ -264,7 +266,7 @@ func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
 	}
 
 	if cond, ok := r.networkCondition(to); ok {
-		if !r.applyNetworkConstraints(string(to), cond.GetLatency(), cond.GetBandwidth(), cond.GetReliability(), 1.0, "P2P") {
+		if !r.applyNetworkConstraints(string(to), cond.GetLatency(), cond.GetBandwidth(), cond.GetReliability(), gossipPayloadMb, "P2P") {
 			return fmt.Errorf("gossip packet dropped to %s", to)
 		}
 	}
@@ -352,7 +354,7 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 		reliability := cond.GetReliability()
 
 		go func(tID string, lat, bw, rel float64) {
-			if !r.applyNetworkConstraints(tID, lat, bw, rel, 0.001, "Raft") {
+			if !r.applyNetworkConstraints(tID, lat, bw, rel, raftPayloadMb, "Raft") {
 				return
 			}
 
@@ -403,14 +405,14 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 	}
 }
 
-func (r *Robot) applyNetworkConstraints(targetID string, latencyMs, bandwidthMbps, reliability, payloadMB float64, channel string) bool {
+func (r *Robot) applyNetworkConstraints(targetID string, latencyMs, bandwidthMbps, reliability, payloadMb float64, channel string) bool {
 	if rand.Float64() > reliability {
 		log.Printf("[%s Send] Packet from %s to %s DROP (Reliability: %.2f)", channel, r.ID, targetID, reliability)
 		return false
 	}
 
 	effectiveBW := math.Max(bandwidthMbps, 0.1)
-	transferTimeSec := (payloadMB * 8.0) / effectiveBW
+	transferTimeSec := (payloadMb * 8.0) / effectiveBW
 	transferTimeMs := transferTimeSec * 1000.0
 	totalDelayMs := latencyMs + transferTimeMs
 	time.Sleep(time.Duration(totalDelayMs) * time.Millisecond)
