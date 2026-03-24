@@ -21,6 +21,8 @@ services:
       - world-engine
     networks:
       - swarm-net
+    ports:
+      - "8081"
     deploy:
      replicas: 5
 

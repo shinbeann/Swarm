@@ -29,3 +29,8 @@ Thumbs.db
 coverage.out
 __pycache__/
 *.pyc
+
+# Go binaries built locally
+Robot/robot
+WorldEngine/worldengine
+Visualiser/server/server

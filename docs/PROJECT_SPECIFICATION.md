@@ -41,31 +41,62 @@ Specifically, there should be the following services:
 * VisualiserService: used for communication between world and visualiser, with the world as the server and the visualiser as the client.  
     * GetEnvironmentData: visualiser requests for environment data from the world.  
     * GetRobotData: visualiser requests for robot data relevant to the visualiser from the world.
-* PeerService: used for peer-to-peer communication directly between robots.
-    * SyncData: robot sends a synchronization payload to a neighboring robot, which is subjected to the simulated network conditions.
+* PeerService: the gossip knowledge dissemination channel for direct robot-to-robot communication.
+    * SyncData: carries a `GossipMessage` payload (landmark discoveries and future shared knowledge) plus a Lamport clock for metadata ordering. Subject to simulated network constraints. Deduplication is by landmark `ID + timestamp`.
+* RaftService: used for robot-to-robot consensus traffic, strictly separate from `PeerService`.
+    * RequestVote: candidate asks a peer for a vote using canonical term and last-log metadata.
+    * AppendEntries: leader sends heartbeat or replicated log entries with prev-log consistency checks.
 
-### Environment definitions
-The environment defines a coordinate space starting from 0,0, up to a defined boundary.
-* Obstacles: Static rectangular areas defined by an X, Y, Width, and Height that robots cannot enter. They are returned by the World Engine in `GetEnvironmentData` for the Visualiser and dynamically within range during `GetSensorData` for the Robots.
+* Landmarks: Point-of-interest objects (casualties, corridors, obstacle-landmarks) placed by the World Engine at startup. Returned to robots as `ObjectData` with type prefix `landmark:` when within `discoveryRadius` (10 units). Also encoded as small environment obstacles for the Visualiser.
 
 ## Robot
 
-Each robot is an independent agent that runs its own control loop, encapsulated in a `Robot` struct. It is responsible for its own movement, sensor data processing, and decision-making.  
+Each robot is an independent agent that runs its own control loop, encapsulated in a `Robot` struct. It coordinates three subsystems:
 
-The robot is implemented in Go. Each robot runs in its own Docker container, with the whole swarm being deployed via Docker Compose.  
+1. **Motion/control**: heartbeat, sensor processing, and movement requests via WorldEngine.
+2. **Gossip subsystem**: landmark discovery, `KnowledgeStore`, `NeighbourRegistry`, `GossipEngine`, knowledge dissemination via `PeerService`.
+3. **Raft consensus subsystem**: leader election and log replication via `RaftService`.
 
-Robots communicate with the World Engine using gRPC and maintain a local `LamportClock` for logical timing.
+The robot is implemented in Go. Each robot runs in its own Docker container, with the whole swarm being deployed via Docker Compose.
+
+Robots communicate with the World Engine using gRPC and maintain a local `LamportClock` for logical timing metadata.
+
+### Gossip Knowledge Dissemination
+`PeerService` (port `:50052`) is the gossip transport. Robots discover landmarks via `GetSensorData` and record them in a local `KnowledgeStore` with a Lamport timestamp. A background `GossipEngine` (1-second ticker) selects an active neighbour from `NeighbourRegistry` and pushes all known `LandmarkEntry` records as a JSON `GossipMessage` in `PeerSyncRequest.payload`.
+
+On receive, `HandlePeerSync`:
+1. Updates the Lamport clock (metadata only, not correctness-critical).
+2. Records the sender as an active neighbour.
+3. Merges incoming landmark entries into the local `KnowledgeStore` using `ID + timestamp` deduplication.
+
+A second periodic sync (every 2 s, network-delay-simulated) maintains neighbour liveness and Lamport clock propagation across the constrained network.
 
 ### Peer-to-Peer Communication
-Robots communicate with each other natively using a localized `PeerService` hosted on a secondary port (`:50052`). This communication physically enacts the simulated network constraints bounded by the World Engine. 
-In the control loop, robots evaluate their peers based on `GetNetworkData`, and attempt to propagate payloads (e.g., 1MB mock data) and synchronize their `LamportClock`:
-* **Reliability:** The packet is subjected to a random chance of dropping completely before it leaves the sender.
-* **Bandwidth & Latency:** If not dropped, the theoretical transmission time matching the bandwidth is calculated and added to the network latency, before artificially sleeping the goroutine to delay the actual gRPC request execution.
+The gossip sync physically enacts the simulated network constraints bounded by the World Engine:
+* **Reliability:** Packet is subjected to a random drop probability before it leaves the sender.
+* **Bandwidth & Latency:** If not dropped, the theoretical transmission time is calculated and the goroutine sleeps to simulate the delay before making the RPC call.
+
+### Raft Coordination Layer
+Robots include an in-memory Raft coordination layer over dedicated `RaftService` RPCs (port `:50053`), strictly separate from `PeerService`:
+* **Leader election:** Followers become candidates on election timeout, request votes, and become leader on majority.
+* **Heartbeat and append flow:** Leaders send `AppendEntries` heartbeats and append a timestamped `leader_ping` log entry every 10 seconds.
+* **Append validation:** Followers validate `prev_log_index` and `prev_log_term`, truncate conflicting entries, and return acknowledgement.
+* **Commit progression:** Leaders advance commit index after majority replication of current-term entries.
+
+Both gossip and Raft traffic derive their per-peer topology from `GetNetworkData` (WorldEngine-derived bandwidth, latency, and reliability), but use separate gRPC services with independent cadence and retry behavior.
+
+### Runtime Observability
+Each robot exposes `GET /status` over HTTP (default bind `:8081`, configurable by `-status-addr`) to report both the Raft consensus layer and the gossip knowledge layer:
+* **Raft fields**: role, term, known leader, log length, commit index, election timeout, timing metadata.
+* **Gossip fields**: discovered landmark count, active neighbour count.
 
 ## World
-The world subproject serves as the central authority for the simulation. It should be written in Go.  
+The world subproject serves as the central authority for the simulation. It should be written in Go.
 
-For the purpose of this simulation, the world is a 2D plane with a defined boundary of 1000×1000 units.  
+For the purpose of this simulation, the world is a 2D plane with a defined boundary of 1000×1000 units.
+
+### Landmarks
+The World Engine places a fixed set of landmarks (casualties, corridors, obstacle-landmarks) at startup. When a robot comes within `discoveryRadius` (10 units) of a landmark during `GetSensorData`, the landmark is returned as an `ObjectData` entry with type prefix `landmark:<type>`. Landmarks are also encoded as small environment obstacles so the Visualiser can render them without protobuf changes.
 
 ### Simulated Network 
 The World Engine tracks all active robots and establishes peer availability and metrics based strictly on Euclidean distances between them when responding to `GetNetworkData`. It utilizes the following degradation parameters:
@@ -90,8 +121,10 @@ Major technical and design decisions are tracked in `docs/adr/`:
 | :--- | :--- | :--- |
 | [001](adr/001-visualiser-bff-websocket.md) | Visualiser BFF + WebSocket | The Visualiser uses a Go proxy to bridge gRPC to WebSockets for the browser UI. |
 | [002](adr/002-go-grpc-language-stack.md) | Go + gRPC Language Stack | Robot and WorldEngine are implemented in Go with protobuf-generated gRPC stubs. |
-| [003](adr/003-world-engine-obstacle-authority.md) | World Engine Obstacle Authority | The World Engine is the sole source of obstacle data; robots receive proximity-filtered sensor data only. |
+| [003](adr/003-world-engine-obstacle-authority.md) | World Engine Obstacle Authority | The World Engine is the sole source of obstacle and landmark data; robots receive proximity-filtered sensor data only. |
 | [004](adr/004-peer-to-peer-network-simulation.md) | Peer-to-Peer Network Simulation | Robots host a `PeerService` gRPC server directly, while the World Engine acts as a network oracle supplying distance-based bandwidth, latency, and reliability metrics. |
+| [005](adr/005-raft-over-peer-sync-with-status-endpoint.md) | Dedicated Raft Service + Status Endpoint | Robots run a dedicated `RaftService` for election/replication traffic and expose a local HTTP status endpoint reporting both Raft and gossip state. |
+| [006](adr/006-peer-gossip-as-knowledge-dissemination.md) | PeerService as Knowledge Dissemination Channel | `PeerService` evolves from generic Lamport sync to a structured gossip channel for landmark discoveries and future shared robot knowledge. |
 
 # Current Implementation State
 

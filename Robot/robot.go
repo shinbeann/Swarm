@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	pb "github.com/yihre/swarm-project/communications/proto"
@@ -15,7 +17,63 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// raftNodeState represents the Raft consensus role of a robot.
+type raftNodeState int
+
+const (
+	raftFollower  raftNodeState = iota
+	raftCandidate               // nolint
+	raftLeader
+)
+
+const (
+	raftLeaderPingInterval = 10 * time.Second
+	raftElectionMinTimeout = 4 * time.Second
+	raftElectionJitter     = 3 * time.Second
+	raftSyncInterval       = 250 * time.Millisecond
+)
+
+// RaftLogEntry is an in-memory record of a replicated log command.
+type RaftLogEntry struct {
+	Term            int64
+	Index           int64
+	Type            string
+	Payload         []byte
+	TimestampUnixMs int64
+}
+
+// RobotStatus is the JSON snapshot returned by GET /status.
+// It exposes state from both the Raft consensus subsystem and the gossip
+// knowledge subsystem so operators can diagnose both layers at runtime.
+type RobotStatus struct {
+	RobotID string `json:"robot_id"`
+
+	// Raft consensus fields
+	RaftState          string `json:"raft_state"`
+	RaftTerm           int64  `json:"raft_term"`
+	KnownLeaderID      string `json:"known_leader_id"`
+	LogLength          int    `json:"log_length"`
+	CommitIndex        int64  `json:"commit_index"`
+	LastRaftPingUnixMs int64  `json:"last_raft_ping_unix_ms"`
+	LastLeaderSeenMs   int64  `json:"last_leader_seen_unix_ms"`
+	ElectionTimeoutMs  int64  `json:"election_timeout_ms"`
+	KnownPeers         int    `json:"known_peers"`
+
+	// Gossip knowledge subsystem fields
+	LandmarkCount    int `json:"landmark_count"`
+	ActiveNeighbours int `json:"active_neighbours"`
+}
+
+// Robot is the top-level agent type. It coordinates:
+//   - Motion/control: heartbeat, sensor processing, movement requests via WorldEngine.
+//   - Gossip subsystem: landmark discovery, KnowledgeStore, NeighbourRegistry, GossipEngine.
+//   - Raft consensus subsystem: leader election and log replication over RaftService.
+//
+// The Raft state is protected by Robot.mu. Gossip state is protected by the
+// internal mutexes of KnowledgeStore and NeighbourRegistry.
 type Robot struct {
+	mu sync.Mutex
+
 	ID      string
 	X       float64
 	Y       float64
@@ -25,28 +83,59 @@ type Robot struct {
 	Clock    *LamportClock
 	lastSync time.Time
 
-	store              *KnowledgeStore
-	neighbours         *NeighbourRegistry
-	gossip             *GossipEngine
+	// Gossip subsystem — landmark discovery and knowledge dissemination via PeerService.
+	store               *KnowledgeStore
+	neighbours          *NeighbourRegistry
+	gossip              *GossipEngine
 	discoveredLandmarks map[LandmarkID]bool
 
-	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true
+	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true.
 	nearObstacle  bool
 	obstacleAngle float64
+
+	// Raft consensus subsystem — leader election and log replication via RaftService.
+	// These fields must only be accessed while holding Robot.mu.
+	raftState          raftNodeState
+	raftTerm           int64
+	knownLeaderID      string
+	votedFor           string
+	raftLog            []RaftLogEntry
+	commitIndex        int64
+	lastRaftPingSentAt time.Time
+	lastLeaderSeenAt   time.Time
+	lastElectionAt     time.Time
+	electionTimeout    time.Duration
+	votesGranted       map[string]bool
+	knownPeerIDs       map[string]struct{}
+	nextIndex          map[string]int64
+	matchIndex         map[string]int64
+	totalNodes         int
 }
 
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r := &Robot{
-		ID:       id,
-		X:        rand.Float64() * 800,
-		Y:        rand.Float64() * 600,
-		Heading:  rand.Float64() * 2 * math.Pi,
-		Client:   client,
-		Clock:    NewLamportClock(),
-		lastSync: time.Now(),
-		store:    NewKnowledgeStore(),
-		neighbours: NewNeighbourRegistry(3 * time.Second),
+		ID:                  id,
+		X:                   rand.Float64() * 800,
+		Y:                   rand.Float64() * 600,
+		Heading:             rand.Float64() * 2 * math.Pi,
+		Client:              client,
+		Clock:               NewLamportClock(),
+		lastSync:            time.Now(),
+		store:               NewKnowledgeStore(),
+		neighbours:          NewNeighbourRegistry(3 * time.Second),
 		discoveredLandmarks: make(map[LandmarkID]bool),
+		// Raft initial state
+		raftState:        raftFollower,
+		raftTerm:         1,
+		lastLeaderSeenAt: time.Now(),
+		raftLog:          make([]RaftLogEntry, 0),
+		commitIndex:      -1,
+		electionTimeout:  randomElectionTimeout(),
+		votesGranted:     make(map[string]bool),
+		knownPeerIDs:     make(map[string]struct{}),
+		nextIndex:        make(map[string]int64),
+		matchIndex:       make(map[string]int64),
+		totalNodes:       1,
 	}
 
 	r.gossip = NewGossipEngine(RobotID(r.ID), r.Clock, r.store, r.neighbours, r.sendGossipMessage)
@@ -63,25 +152,31 @@ func (r *Robot) Stop() {
 func (r *Robot) Run(ctx context.Context) {
 	heartbeatTicker := time.NewTicker(30 * time.Millisecond)
 	moveTicker := time.NewTicker(2 * time.Second)
+	raftTicker := time.NewTicker(raftSyncInterval)
 	defer heartbeatTicker.Stop()
 	defer moveTicker.Stop()
+	defer raftTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-heartbeatTicker.C:
-			r.tick(ctx)
+			r.tickWorld(ctx)
 		case <-moveTicker.C:
 			r.requestMovement(ctx)
+		case <-raftTicker.C:
+			r.tickRaft(ctx)
 		}
 	}
 }
 
-func (r *Robot) tick(ctx context.Context) {
+// tickWorld runs every 30 ms: sends heartbeat, reads sensor data, and triggers
+// periodic gossip sync with peers.
+func (r *Robot) tickWorld(ctx context.Context) {
 	r.Clock.Tick()
 
-	// Heartbeat — WorldEngine returns the canonical position
+	// Heartbeat — WorldEngine returns the canonical position.
 	heartbeatResp, err := r.Client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
 		RobotId: r.ID,
 		X:       r.X,
@@ -91,13 +186,13 @@ func (r *Robot) tick(ctx context.Context) {
 	if err != nil {
 		log.Printf("heartbeat error: %v", err)
 	} else if heartbeatResp != nil && heartbeatResp.GetSuccess() {
-		// Sync local position mirror from the authoritative WorldEngine state
+		// Sync local position mirror from the authoritative WorldEngine state.
 		r.X = heartbeatResp.GetX()
 		r.Y = heartbeatResp.GetY()
 		r.Heading = heartbeatResp.GetHeading()
 	}
 
-	// Sensor — detect nearby obstacles; result is used by requestMovement
+	// Sensor — detect nearby obstacles and landmarks.
 	sensorResp, err := r.Client.GetSensorData(ctx, &pb.SensorRequest{RobotId: r.ID})
 	if err != nil {
 		return
@@ -116,6 +211,7 @@ func (r *Robot) tick(ctx context.Context) {
 			}
 		}
 
+		// Landmark detection — first discovery is handed to the gossip engine.
 		if strings.HasPrefix(obj.GetType(), "landmark:") {
 			id := LandmarkID(obj.GetId())
 			if !r.discoveredLandmarks[id] {
@@ -126,29 +222,31 @@ func (r *Robot) tick(ctx context.Context) {
 		}
 	}
 
-	// P2P Sync (Every 2 seconds)
+	// Gossip peer sync every 2 seconds.
 	if time.Since(r.lastSync) > 2*time.Second {
 		r.lastSync = time.Now()
-		r.syncWithPeers(ctx)
+		r.syncGossipWithPeers(ctx)
 	}
+}
+
+func (r *Robot) tickRaft(ctx context.Context) {
+	r.maybeStartElection()
+	r.syncRaftWithPeers(ctx)
 }
 
 // requestMovement picks a target position and asks the WorldEngine to move the robot there.
 // The WorldEngine has full authority over the actual path and final position.
 func (r *Robot) requestMovement(ctx context.Context) {
-	// Pick a random target 100–300 units away
 	distance := 100.0 + rand.Float64()*200.0
 	angle := rand.Float64() * 2 * math.Pi
 
 	if r.nearObstacle {
-		// Aim away from the detected obstacle with a small random spread
 		angle = r.obstacleAngle + math.Pi + (rand.Float64()*0.5 - 0.25)
 	}
 
 	targetX := r.X + math.Cos(angle)*distance
 	targetY := r.Y + math.Sin(angle)*distance
 
-	// Keep well clear of boundary walls
 	targetX = math.Max(50, math.Min(950, targetX))
 	targetY = math.Max(50, math.Min(950, targetY))
 
@@ -165,7 +263,15 @@ func (r *Robot) requestMovement(ctx context.Context) {
 	}
 }
 
-func (r *Robot) syncWithPeers(ctx context.Context) {
+// -----------------------------------------------------------------------
+// Gossip subsystem — PeerService transport, knowledge dissemination
+// -----------------------------------------------------------------------
+
+// syncGossipWithPeers queries the WorldEngine for network conditions, records
+// active neighbours for the gossip engine, and dispatches simulated constrained
+// peer syncs (Lamport clock updates) to each reachable peer over PeerService.
+// Actual knowledge payloads are sent by the GossipEngine's background loop.
+func (r *Robot) syncGossipWithPeers(ctx context.Context) {
 	netResp, err := r.Client.GetNetworkData(ctx, &pb.NetworkRequest{RobotId: r.ID})
 	if err != nil {
 		log.Printf("could not get network data: %v", err)
@@ -174,28 +280,16 @@ func (r *Robot) syncWithPeers(ctx context.Context) {
 
 	for _, cond := range netResp.GetNetworkConditions() {
 		targetID := cond.GetTargetRobotId()
+		// Record each reachable peer so the gossip engine can select targets.
 		r.neighbours.RecordHeartbeat(RobotID(targetID))
 		latency := cond.GetLatency()
 		bandwidth := cond.GetBandwidth()
 		reliability := cond.GetReliability()
 
 		go func(tID string, lat, bw, rel float64) {
-			// 1. Reliability (Packet Loss)
-			if rand.Float64() > rel {
-				log.Printf("[P2P Send] Packet from %s to %s DROP (Reliability: %.2f)", r.ID, tID, rel)
+			if !r.applyNetworkConstraints(tID, lat, bw, rel, 1.0, "P2P") {
 				return
 			}
-
-			// Simulated Payload of 1MB (8 Megabits)
-			payloadSizeMB := 1.0
-			transferTimeSec := (payloadSizeMB * 8.0) / bw
-			transferTimeMs := transferTimeSec * 1000.0
-			totalDelayMs := lat + transferTimeMs
-
-			log.Printf("[P2P Send] %s -> %s (Delay: %.0fms, BW: %.1fMbps)", r.ID, tID, totalDelayMs, bw)
-
-			// 2. Latency + Transfer Delay
-			time.Sleep(time.Duration(totalDelayMs) * time.Millisecond)
 
 			peerAddr := tID + ":50052"
 			conn, err := grpc.NewClient(peerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -208,18 +302,24 @@ func (r *Robot) syncWithPeers(ctx context.Context) {
 			syncCtx, syncCancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer syncCancel()
 
-			_, err = peerClient.SyncData(syncCtx, &pb.PeerSyncRequest{
+			resp, err := peerClient.SyncData(syncCtx, &pb.PeerSyncRequest{
 				SenderId:     r.ID,
-				Payload:      []byte{1}, // dummy payload
+				Payload:      []byte{}, // Lamport clock sync only; knowledge payloads come from GossipEngine
 				LamportClock: int64(r.Clock.Time()),
 			})
 			if err != nil {
 				log.Printf("[P2P Error] %s -> %s: %v", r.ID, tID, err)
+				return
+			}
+			if !resp.GetReceived() {
+				log.Printf("[P2P Warn] %s -> %s not acknowledged", r.ID, tID)
 			}
 		}(targetID, latency, bandwidth, reliability)
 	}
 }
 
+// sendGossipMessage is the SendFunc used by GossipEngine to deliver a knowledge
+// payload to a specific peer over PeerService.SyncData.
 func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
@@ -248,15 +348,544 @@ func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
 	return nil
 }
 
-func (r *Robot) OnPeerSync(req *pb.PeerSyncRequest) {
+// HandlePeerSync is called by the peerServer gRPC handler when a SyncData
+// request arrives. It updates the Lamport clock, records the sender as an
+// active neighbour, and — if the payload is a valid GossipMessage — merges
+// the received landmark entries into the local KnowledgeStore.
+func (r *Robot) HandlePeerSync(req *pb.PeerSyncRequest) *pb.PeerSyncResponse {
 	r.Clock.Update(int(req.GetLamportClock()))
 	r.neighbours.RecordHeartbeat(RobotID(req.GetSenderId()))
 
-	var msg GossipMessage
-	if err := json.Unmarshal(req.GetPayload(), &msg); err == nil {
-		r.gossip.OnReceive(&msg)
+	if len(req.GetPayload()) > 0 {
+		var msg GossipMessage
+		if err := json.Unmarshal(req.GetPayload(), &msg); err == nil {
+			r.gossip.OnReceive(&msg)
+		} else {
+			log.Printf("[P2P Recv] %s <- %s non-gossip payload (Lamport sync only)", r.ID, req.GetSenderId())
+		}
+	}
+
+	return &pb.PeerSyncResponse{Received: true}
+}
+
+// -----------------------------------------------------------------------
+// Raft consensus subsystem — RaftService election and log replication
+// -----------------------------------------------------------------------
+
+// syncRaftWithPeers fetches current network topology, updates the Raft peer
+// view, and dispatches constrained RequestVote or AppendEntries RPCs to each
+// reachable peer over RaftService.
+func (r *Robot) syncRaftWithPeers(ctx context.Context) {
+	netResp, err := r.Client.GetNetworkData(ctx, &pb.NetworkRequest{RobotId: r.ID})
+	if err != nil {
+		log.Printf("could not get network data for raft: %v", err)
+		return
+	}
+	r.updatePeerTopology(netResp.GetNetworkConditions())
+
+	r.mu.Lock()
+	state := r.raftState
+	if state == raftLeader {
+		r.maybeAppendLeaderPingLocked(time.Now())
+	}
+	r.mu.Unlock()
+
+	if state == raftFollower {
 		return
 	}
 
-	log.Printf("[P2P Recv] Robot %s received non-gossip payload from %s", r.ID, req.GetSenderId())
+	for _, cond := range netResp.GetNetworkConditions() {
+		targetID := cond.GetTargetRobotId()
+		latency := cond.GetLatency()
+		bandwidth := cond.GetBandwidth()
+		reliability := cond.GetReliability()
+
+		go func(tID string, lat, bw, rel float64) {
+			if !r.applyNetworkConstraints(tID, lat, bw, rel, 0.001, "Raft") {
+				return
+			}
+
+			raftAddr := tID + ":50053"
+			conn, err := grpc.NewClient(raftAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			raftClient := pb.NewRaftServiceClient(conn)
+			rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+			defer rpcCancel()
+
+			r.mu.Lock()
+			currState := r.raftState
+			r.mu.Unlock()
+
+			switch currState {
+			case raftCandidate:
+				voteReq := r.buildVoteRequest()
+				if voteReq == nil {
+					return
+				}
+				resp, err := raftClient.RequestVote(rpcCtx, voteReq)
+				if err != nil {
+					return
+				}
+				log.Printf("[Raft Send] %s -> %s RequestVote term=%d", r.ID, tID, voteReq.GetTerm())
+				r.handleVoteResponse(tID, resp)
+			case raftLeader:
+				appendReq := r.buildAppendEntriesRequestForPeer(tID)
+				if appendReq == nil {
+					return
+				}
+				resp, err := raftClient.AppendEntries(rpcCtx, appendReq)
+				if err != nil {
+					return
+				}
+				if len(appendReq.GetEntries()) == 0 {
+					log.Printf("[Raft Send] %s -> %s heartbeat term=%d", r.ID, tID, appendReq.GetTerm())
+				} else {
+					log.Printf("[Raft Send] %s -> %s append term=%d entries=%d", r.ID, tID, appendReq.GetTerm(), len(appendReq.GetEntries()))
+				}
+				r.handleAppendResponse(tID, appendReq, resp)
+			}
+		}(targetID, latency, bandwidth, reliability)
+	}
+}
+
+// applyNetworkConstraints simulates packet loss and bandwidth+latency delay
+// before an outgoing RPC. Returns false if the packet should be dropped.
+// Called in a goroutine so the sleep does not block other operations.
+func (r *Robot) applyNetworkConstraints(targetID string, latencyMs, bandwidthMbps, reliability, payloadMB float64, channel string) bool {
+	if rand.Float64() > reliability {
+		log.Printf("[%s Send] Packet from %s to %s DROP (Reliability: %.2f)", channel, r.ID, targetID, reliability)
+		return false
+	}
+
+	effectiveBW := math.Max(bandwidthMbps, 0.1)
+	transferTimeSec := (payloadMB * 8.0) / effectiveBW
+	transferTimeMs := transferTimeSec * 1000.0
+	totalDelayMs := latencyMs + transferTimeMs
+
+	time.Sleep(time.Duration(totalDelayMs) * time.Millisecond)
+	return true
+}
+
+// -----------------------------------------------------------------------
+// Raft helper methods — election, voting, log replication
+// -----------------------------------------------------------------------
+
+func (r *Robot) maybeStartElection() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	if r.raftState == raftLeader {
+		return
+	}
+
+	if now.Sub(r.lastLeaderSeenAt) < r.electionTimeout {
+		return
+	}
+
+	if !r.lastElectionAt.IsZero() && now.Sub(r.lastElectionAt) < r.electionTimeout {
+		return
+	}
+
+	r.raftState = raftCandidate
+	r.raftTerm++
+	r.knownLeaderID = ""
+	r.votedFor = r.ID
+	r.votesGranted = map[string]bool{r.ID: true}
+	r.lastElectionAt = now
+	r.electionTimeout = randomElectionTimeout()
+
+	log.Printf("[Raft] Robot %s started election for term %d", r.ID, r.raftTerm)
+}
+
+func (r *Robot) updatePeerTopology(conditions []*pb.NetworkData) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.knownPeerIDs = make(map[string]struct{})
+	for _, cond := range conditions {
+		peerID := cond.GetTargetRobotId()
+		if peerID == "" || peerID == r.ID {
+			continue
+		}
+		r.knownPeerIDs[peerID] = struct{}{}
+		if _, ok := r.nextIndex[peerID]; !ok {
+			r.nextIndex[peerID] = int64(len(r.raftLog))
+		}
+		if _, ok := r.matchIndex[peerID]; !ok {
+			r.matchIndex[peerID] = -1
+		}
+	}
+
+	r.totalNodes = len(r.knownPeerIDs) + 1
+}
+
+func (r *Robot) buildVoteRequest() *pb.VoteRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.raftState != raftCandidate {
+		return nil
+	}
+	lastIdx, lastTerm := r.getLastLogInfoLocked()
+	return &pb.VoteRequest{
+		Term:         r.raftTerm,
+		CandidateId:  r.ID,
+		LastLogIndex: lastIdx,
+		LastLogTerm:  lastTerm,
+	}
+}
+
+func (r *Robot) maybeAppendLeaderPingLocked(now time.Time) {
+	if r.raftState != raftLeader {
+		return
+	}
+
+	if !r.lastRaftPingSentAt.IsZero() && now.Sub(r.lastRaftPingSentAt) < raftLeaderPingInterval {
+		return
+	}
+
+	timestampMs := now.UnixMilli()
+	pingPayload := []byte(fmt.Sprintf("leader-ping:%s:%d", r.ID, timestampMs))
+	entry := RaftLogEntry{
+		Term:            r.raftTerm,
+		Index:           int64(len(r.raftLog)),
+		Type:            "leader_ping",
+		Payload:         pingPayload,
+		TimestampUnixMs: timestampMs,
+	}
+
+	r.raftLog = append(r.raftLog, entry)
+	r.matchIndex[r.ID] = entry.Index
+	r.lastRaftPingSentAt = now
+	r.lastLeaderSeenAt = now
+}
+
+func (r *Robot) buildAppendEntriesRequestForPeer(peerID string) *pb.AppendEntriesRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.raftState != raftLeader {
+		return nil
+	}
+
+	nextIdx, ok := r.nextIndex[peerID]
+	if !ok {
+		nextIdx = int64(len(r.raftLog))
+		r.nextIndex[peerID] = nextIdx
+	}
+
+	prevIdx := nextIdx - 1
+	prevTerm := int64(-1)
+	if prevIdx >= 0 && prevIdx < int64(len(r.raftLog)) {
+		prevTerm = r.raftLog[prevIdx].Term
+	}
+
+	entries := make([]*pb.RaftLogEntry, 0)
+	for i := nextIdx; i < int64(len(r.raftLog)); i++ {
+		e := r.raftLog[i]
+		entries = append(entries, &pb.RaftLogEntry{
+			Term:            e.Term,
+			Command:         append([]byte(nil), e.Payload...),
+			LogType:         e.Type,
+			TimestampUnixMs: e.TimestampUnixMs,
+		})
+	}
+
+	return &pb.AppendEntriesRequest{
+		Term:         r.raftTerm,
+		LeaderId:     r.ID,
+		PrevLogIndex: prevIdx,
+		PrevLogTerm:  prevTerm,
+		Entries:      entries,
+		LeaderCommit: r.commitIndex,
+	}
+}
+
+func (r *Robot) handleVoteResponse(peerID string, resp *pb.VoteResponse) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if resp == nil {
+		return
+	}
+
+	if resp.GetTerm() > r.raftTerm {
+		r.becomeFollowerLocked(resp.GetTerm(), "")
+		return
+	}
+
+	if r.raftState != raftCandidate {
+		return
+	}
+
+	if resp.GetVoteGranted() {
+		r.votesGranted[peerID] = true
+		if len(r.votesGranted) > r.totalNodes/2 {
+			r.becomeLeaderLocked()
+		}
+	}
+}
+
+func (r *Robot) handleAppendResponse(peerID string, req *pb.AppendEntriesRequest, resp *pb.AppendEntriesResponse) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if resp == nil {
+		return
+	}
+
+	if resp.GetTerm() > r.raftTerm {
+		r.becomeFollowerLocked(resp.GetTerm(), "")
+		return
+	}
+
+	if r.raftState != raftLeader || req.GetTerm() != r.raftTerm {
+		return
+	}
+
+	if resp.GetSuccess() {
+		if len(req.GetEntries()) > 0 {
+			lastIdx := req.GetPrevLogIndex() + int64(len(req.GetEntries()))
+			r.matchIndex[peerID] = lastIdx
+			r.nextIndex[peerID] = lastIdx + 1
+			r.advanceCommitIndexLocked()
+		}
+		return
+	}
+
+	if r.nextIndex[peerID] > 0 {
+		r.nextIndex[peerID]--
+	}
+}
+
+func (r *Robot) becomeLeaderLocked() {
+	r.raftState = raftLeader
+	r.knownLeaderID = r.ID
+	r.votedFor = ""
+	r.lastLeaderSeenAt = time.Now()
+	r.lastRaftPingSentAt = time.Time{}
+
+	lastLogIndex := int64(len(r.raftLog))
+	for peerID := range r.knownPeerIDs {
+		r.nextIndex[peerID] = lastLogIndex
+		r.matchIndex[peerID] = -1
+	}
+	r.matchIndex[r.ID] = lastLogIndex - 1
+
+	log.Printf("[Raft] Robot %s became leader for term %d", r.ID, r.raftTerm)
+}
+
+func (r *Robot) advanceCommitIndexLocked() {
+	for idx := r.commitIndex + 1; idx < int64(len(r.raftLog)); idx++ {
+		if r.raftLog[idx].Term != r.raftTerm {
+			continue
+		}
+
+		replicated := 1
+		for peerID := range r.knownPeerIDs {
+			if r.matchIndex[peerID] >= idx {
+				replicated++
+			}
+		}
+
+		if replicated > r.totalNodes/2 {
+			r.commitIndex = idx
+			log.Printf("[Raft] Leader %s committed idx=%d term=%d", r.ID, idx, r.raftTerm)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------
+// Raft follower — gRPC request handlers (called by raftServer in main.go)
+// -----------------------------------------------------------------------
+
+func (r *Robot) HandleRequestVote(req *pb.VoteRequest) *pb.VoteResponse {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	log.Printf("[Raft Receive] %s <- %s RequestVote term=%d", r.ID, req.GetCandidateId(), req.GetTerm())
+
+	resp := &pb.VoteResponse{Term: r.raftTerm, VoteGranted: false}
+	if req.GetTerm() < r.raftTerm {
+		return resp
+	}
+
+	if req.GetTerm() > r.raftTerm {
+		r.becomeFollowerLocked(req.GetTerm(), "")
+	}
+
+	voteGranted := r.shouldGrantVoteLocked(req.GetCandidateId(), req.GetLastLogIndex(), req.GetLastLogTerm())
+	resp.Term = r.raftTerm
+	resp.VoteGranted = voteGranted
+	return resp
+}
+
+func (r *Robot) HandleAppendEntries(req *pb.AppendEntriesRequest) *pb.AppendEntriesResponse {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	log.Printf("[Raft Receive] %s <- %s AppendEntries term=%d entries=%d", r.ID, req.GetLeaderId(), req.GetTerm(), len(req.GetEntries()))
+
+	resp := &pb.AppendEntriesResponse{Term: r.raftTerm, Success: false}
+	if req.GetTerm() < r.raftTerm {
+		return resp
+	}
+
+	if req.GetTerm() > r.raftTerm {
+		r.becomeFollowerLocked(req.GetTerm(), req.GetLeaderId())
+	}
+
+	r.knownLeaderID = req.GetLeaderId()
+	r.raftState = raftFollower
+	r.lastLeaderSeenAt = time.Now()
+
+	if req.GetPrevLogIndex() >= 0 {
+		if req.GetPrevLogIndex() >= int64(len(r.raftLog)) {
+			return resp
+		}
+		if r.raftLog[req.GetPrevLogIndex()].Term != req.GetPrevLogTerm() {
+			return resp
+		}
+	}
+
+	insertIndex := req.GetPrevLogIndex() + 1
+	for i, entry := range req.GetEntries() {
+		idx := insertIndex + int64(i)
+		incoming := RaftLogEntry{
+			Term:            entry.GetTerm(),
+			Index:           idx,
+			Type:            entry.GetLogType(),
+			Payload:         append([]byte(nil), entry.GetCommand()...),
+			TimestampUnixMs: entry.GetTimestampUnixMs(),
+		}
+
+		if idx < int64(len(r.raftLog)) {
+			existing := r.raftLog[idx]
+			if existing.Term != incoming.Term || existing.Type != incoming.Type || !bytes.Equal(existing.Payload, incoming.Payload) {
+				r.raftLog = r.raftLog[:idx]
+				r.raftLog = append(r.raftLog, incoming)
+			}
+			continue
+		}
+
+		if idx > int64(len(r.raftLog)) {
+			return resp
+		}
+		r.raftLog = append(r.raftLog, incoming)
+	}
+
+	if req.GetLeaderCommit() > r.commitIndex {
+		r.commitIndex = min64(req.GetLeaderCommit(), int64(len(r.raftLog)-1))
+	}
+
+	resp.Term = r.raftTerm
+	resp.Success = true
+	return resp
+}
+
+func (r *Robot) becomeFollowerLocked(term int64, leaderID string) {
+	r.raftTerm = max64(r.raftTerm, term)
+	r.raftState = raftFollower
+	r.knownLeaderID = leaderID
+	r.votedFor = ""
+	r.votesGranted = make(map[string]bool)
+	r.lastLeaderSeenAt = time.Now()
+	r.electionTimeout = randomElectionTimeout()
+}
+
+func (r *Robot) shouldGrantVoteLocked(candidateID string, candidateLastLogIndex int64, candidateLastLogTerm int64) bool {
+	if r.votedFor != "" && r.votedFor != candidateID {
+		return false
+	}
+
+	lastIdx, lastTerm := r.getLastLogInfoLocked()
+	logUpToDate := candidateLastLogTerm > lastTerm ||
+		(candidateLastLogTerm == lastTerm && candidateLastLogIndex >= lastIdx)
+
+	if !logUpToDate {
+		return false
+	}
+
+	r.votedFor = candidateID
+	r.lastLeaderSeenAt = time.Now()
+	r.electionTimeout = randomElectionTimeout()
+	return true
+}
+
+// -----------------------------------------------------------------------
+// Utility — log helpers, status snapshot
+// -----------------------------------------------------------------------
+
+func (r *Robot) getLastLogInfoLocked() (int64, int64) {
+	if len(r.raftLog) == 0 {
+		return -1, -1
+	}
+	last := r.raftLog[len(r.raftLog)-1]
+	return last.Index, last.Term
+}
+
+func randomElectionTimeout() time.Duration {
+	return raftElectionMinTimeout + time.Duration(rand.Int63n(int64(raftElectionJitter)))
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func (r *Robot) raftStateStringLocked() string {
+	switch r.raftState {
+	case raftFollower:
+		return "Follower"
+	case raftCandidate:
+		return "Candidate"
+	case raftLeader:
+		return "Leader"
+	default:
+		return "Unknown"
+	}
+}
+
+// StatusSnapshot returns a point-in-time view of both the Raft consensus layer
+// and the gossip knowledge layer for the /status endpoint.
+func (r *Robot) StatusSnapshot() RobotStatus {
+	r.mu.Lock()
+	status := RobotStatus{
+		RobotID:           r.ID,
+		RaftState:         r.raftStateStringLocked(),
+		RaftTerm:          r.raftTerm,
+		KnownLeaderID:     r.knownLeaderID,
+		LogLength:         len(r.raftLog),
+		CommitIndex:       r.commitIndex,
+		ElectionTimeoutMs: r.electionTimeout.Milliseconds(),
+		KnownPeers:        len(r.knownPeerIDs),
+	}
+	if !r.lastRaftPingSentAt.IsZero() {
+		status.LastRaftPingUnixMs = r.lastRaftPingSentAt.UnixMilli()
+	}
+	if !r.lastLeaderSeenAt.IsZero() {
+		status.LastLeaderSeenMs = r.lastLeaderSeenAt.UnixMilli()
+	}
+	r.mu.Unlock()
+
+	// Gossip fields use their own internal mutexes — read after releasing r.mu
+	// to avoid lock inversion.
+	status.LandmarkCount = len(r.store.GetAll())
+	status.ActiveNeighbours = len(r.neighbours.GetActive())
+
+	return status
 }

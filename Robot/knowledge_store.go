@@ -31,7 +31,11 @@ func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, r
 		ks.entries[id] = entry
 	}
 
-	entry.Reporters[reporter] = timestamp
+	// Deduplication by ID + timestamp: only update this reporter's record if
+	// the incoming timestamp is strictly newer than the one already stored.
+	if existing, seen := entry.Reporters[reporter]; !seen || timestamp > existing {
+		entry.Reporters[reporter] = timestamp
+	}
 }
 
 func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
