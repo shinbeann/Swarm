@@ -43,6 +43,9 @@ Specifically, there should be the following services:
     * GetRobotData: visualiser requests for robot data relevant to the visualiser from the world.
 * PeerService: used for peer-to-peer communication directly between robots.
     * SyncData: robot sends a synchronization payload to a neighboring robot, which is subjected to the simulated network conditions.
+* RaftService: used for robot-to-robot consensus communication directly between robots on a dedicated service.
+    * RequestVote: candidate robots request votes during election.
+    * AppendEntries: leaders replicate log entries and send heartbeat-style consistency checks.
 
 ### Environment definitions
 The environment defines a coordinate space starting from 0,0, up to a defined boundary.
@@ -61,6 +64,10 @@ Robots communicate with each other natively using a localized `PeerService` host
 In the control loop, robots evaluate their peers based on `GetNetworkData`, and attempt to propagate payloads (e.g., 1MB mock data) and synchronize their `LamportClock`:
 * **Reliability:** The packet is subjected to a random chance of dropping completely before it leaves the sender.
 * **Bandwidth & Latency:** If not dropped, the theoretical transmission time matching the bandwidth is calculated and added to the network latency, before artificially sleeping the goroutine to delay the actual gRPC request execution.
+
+### Raft Consensus Communication
+Robots also host a dedicated `RaftService` on port `:50053` for consensus messages (`RequestVote`, `AppendEntries`).  
+Peer selection for Raft follows the same world-derived neighbor discovery path as gossip (network conditions refreshed via the heartbeat tick), and applies the same simulated reliability/latency/bandwidth constraints before each Raft RPC.
 
 ## World
 The world subproject serves as the central authority for the simulation. It should be written in Go.  
@@ -92,6 +99,7 @@ Major technical and design decisions are tracked in `docs/adr/`:
 | [002](adr/002-go-grpc-language-stack.md) | Go + gRPC Language Stack | Robot and WorldEngine are implemented in Go with protobuf-generated gRPC stubs. |
 | [003](adr/003-world-engine-obstacle-authority.md) | World Engine Obstacle Authority | The World Engine is the sole source of obstacle data; robots receive proximity-filtered sensor data only. |
 | [004](adr/004-peer-to-peer-network-simulation.md) | Peer-to-Peer Network Simulation | Robots host a `PeerService` gRPC server directly, while the World Engine acts as a network oracle supplying distance-based bandwidth, latency, and reliability metrics. |
+| [005](adr/005-dedicated-raft-service-with-shared-network-constraints.md) | Dedicated Raft Service with Shared Network Constraints | Robots keep main gossip architecture while adding dedicated constrained Raft traffic over `RaftService` with no status endpoint. |
 
 # Current Implementation State
 
@@ -105,3 +113,4 @@ The following features are implemented and running in the current Docker Compose
 - **Visualiser dashboard**: The React+PixiJS UI renders environment boundary, obstacles (red fill), and robots (green triangles) in real-time via WebSocket.
 - **Simulated network constraints**: The World Engine's `GetNetworkData` calculates per-robot peer conditions based on Euclidean distance. Max communication range is `250.0` units with linear degradation of bandwidth (50→1 Mbps), latency (5→250 ms), and reliability (1.0→0.5).
 - **Robot P2P sync**: Each robot hosts a `PeerService` gRPC server on port `:50052`. Every 2 seconds, it fetches peer conditions from the World Engine and dispatches a `SyncData` call to each in-range neighbor, subject to simulated packet drops (reliability), and `time.Sleep`-based delay (latency + bandwidth transfer time for a 1MB payload). The sync now includes a `LamportClock` to maintain logical time across the swarm.
+- **Robot Raft service**: Each robot hosts a dedicated `RaftService` gRPC server on port `:50053` and runs a 250 ms Raft tick. Raft peers are sourced from main neighbor discovery (fed by heartbeat-driven world network updates), and `RequestVote`/`AppendEntries` calls are subjected to the same simulated network constraints model as gossip.
