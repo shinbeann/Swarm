@@ -18,24 +18,18 @@ type SendFunc func(to RobotID, msg *GossipMessage) error
 
 // GossipEngine manages local gossip protocol for one robot.
 type GossipEngine struct {
-	id         RobotID
-	clock      *LamportClock
-	store      *KnowledgeStore
-	neighbours *NeighbourRegistry
-	send       SendFunc
+	robot *Robot
+	send  SendFunc
 
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 }
 
-func NewGossipEngine(id RobotID, clock *LamportClock, store *KnowledgeStore, neighbours *NeighbourRegistry, send SendFunc) *GossipEngine {
+func NewGossipEngine(robot *Robot, send SendFunc) *GossipEngine {
 	return &GossipEngine{
-		id:         id,
-		clock:      clock,
-		store:      store,
-		neighbours: neighbours,
-		send:       send,
-		stopCh:     make(chan struct{}),
+		robot:  robot,
+		send:   send,
+		stopCh: make(chan struct{}),
 	}
 }
 
@@ -65,32 +59,32 @@ func (ge *GossipEngine) gossipLoop() {
 }
 
 func (ge *GossipEngine) gossipOnce() {
-	active := ge.neighbours.GetActive()
+	active := ge.robot.activeNeighbours()
 	if len(active) == 0 {
 		return
 	}
 
 	target := active[rand.Intn(len(active))]
 	msg := &GossipMessage{
-		SenderID:  ge.id,
-		Timestamp: ge.clock.Tick(),
-		Entries:   ge.store.GetAll(),
+		SenderID:  RobotID(ge.robot.ID),
+		Timestamp: ge.robot.Clock.Tick(),
+		Entries:   ge.robot.store.GetAll(),
 	}
 
 	if err := ge.send(target, msg); err != nil {
-		log.Printf("[gossip] %s failed to send to %s: %v", ge.id, target, err)
+		log.Printf("[gossip engine] %s failed to send to %s: %v", ge.robot.ID, target, err)
 	}
 }
 
 func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
-	ge.clock.Update(msg.Timestamp)
+	ge.robot.Clock.Update(msg.Timestamp)
 	for _, entry := range msg.Entries {
-		ge.store.Add(entry.ID, entry.Type, entry.Location, msg.SenderID, msg.Timestamp)
+		ge.robot.store.Add(entry.ID, entry.Type, entry.Location, msg.SenderID, msg.Timestamp)
 	}
 }
 
 func (ge *GossipEngine) RecordDiscovery(id LandmarkID, ltype LandmarkType, loc Location) {
-	timestamp := ge.clock.Tick()
-	ge.store.Add(id, ltype, loc, ge.id, timestamp)
-	log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.id, id, loc.X, loc.Y)
+	timestamp := ge.robot.Clock.Tick()
+	ge.robot.store.Add(id, ltype, loc, RobotID(ge.robot.ID), timestamp)
+	log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)
 }

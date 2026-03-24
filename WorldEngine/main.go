@@ -218,7 +218,6 @@ func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.
 	return &pb.SensorResponse{Objects: detected}, nil
 }
 
-// GetNetworkData — unchanged from your original.
 func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*pb.NetworkResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

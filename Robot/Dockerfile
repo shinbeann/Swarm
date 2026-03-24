@@ -2,21 +2,20 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Copy all source code
-COPY . .
+# We need to copy both the robot and communications modules because robot depends on communications
+COPY Communications /app/Communications
+COPY Robot /app/Robot
 
-# Build the Robot binary
 WORKDIR /app/Robot
+
+# Download dependencies and build
+RUN go mod download
 RUN go build -o /robot-bin .
 
-# Final stage
 FROM alpine:latest
 
-WORKDIR /root/
+WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /robot-bin .
+COPY --from=builder /robot-bin /app/robot-bin
 
-EXPOSE 50052
-
-ENTRYPOINT ["./robot-bin"]
+ENTRYPOINT ["/app/robot-bin"]

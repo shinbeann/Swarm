@@ -23,7 +23,7 @@ func (s *peerServer) SyncData(ctx context.Context, req *pb.PeerSyncRequest) (*pb
 	if s.robot != nil {
 		s.robot.OnPeerSync(req)
 	}
-	log.Printf("[P2P Recv] Robot %s received sync from %s", *robotID, req.GetSenderId())
+	// log.Printf("[P2P Recv] Robot %s received sync from %s", *robotID, req.GetSenderId())
 	return &pb.PeerSyncResponse{Received: true}, nil
 }
 
