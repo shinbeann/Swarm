@@ -688,6 +688,330 @@ func (x *PeerSyncResponse) GetReceived() bool {
 	return false
 }
 
+type VoteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Term          int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	CandidateId   string                 `protobuf:"bytes,2,opt,name=candidate_id,json=candidateId,proto3" json:"candidate_id,omitempty"`
+	LastLogIndex  int64                  `protobuf:"varint,3,opt,name=last_log_index,json=lastLogIndex,proto3" json:"last_log_index,omitempty"`
+	LastLogTerm   int64                  `protobuf:"varint,4,opt,name=last_log_term,json=lastLogTerm,proto3" json:"last_log_term,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoteRequest) Reset() {
+	*x = VoteRequest{}
+	mi := &file_proto_robot_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoteRequest) ProtoMessage() {}
+
+func (x *VoteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoteRequest.ProtoReflect.Descriptor instead.
+func (*VoteRequest) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *VoteRequest) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *VoteRequest) GetCandidateId() string {
+	if x != nil {
+		return x.CandidateId
+	}
+	return ""
+}
+
+func (x *VoteRequest) GetLastLogIndex() int64 {
+	if x != nil {
+		return x.LastLogIndex
+	}
+	return 0
+}
+
+func (x *VoteRequest) GetLastLogTerm() int64 {
+	if x != nil {
+		return x.LastLogTerm
+	}
+	return 0
+}
+
+type VoteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Term          int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	VoteGranted   bool                   `protobuf:"varint,2,opt,name=vote_granted,json=voteGranted,proto3" json:"vote_granted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoteResponse) Reset() {
+	*x = VoteResponse{}
+	mi := &file_proto_robot_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoteResponse) ProtoMessage() {}
+
+func (x *VoteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoteResponse.ProtoReflect.Descriptor instead.
+func (*VoteResponse) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *VoteResponse) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *VoteResponse) GetVoteGranted() bool {
+	if x != nil {
+		return x.VoteGranted
+	}
+	return false
+}
+
+type RaftLogEntry struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Term            int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	Command         []byte                 `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	LogType         string                 `protobuf:"bytes,3,opt,name=log_type,json=logType,proto3" json:"log_type,omitempty"`
+	TimestampUnixMs int64                  `protobuf:"varint,4,opt,name=timestamp_unix_ms,json=timestampUnixMs,proto3" json:"timestamp_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RaftLogEntry) Reset() {
+	*x = RaftLogEntry{}
+	mi := &file_proto_robot_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RaftLogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RaftLogEntry) ProtoMessage() {}
+
+func (x *RaftLogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RaftLogEntry.ProtoReflect.Descriptor instead.
+func (*RaftLogEntry) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RaftLogEntry) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *RaftLogEntry) GetCommand() []byte {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *RaftLogEntry) GetLogType() string {
+	if x != nil {
+		return x.LogType
+	}
+	return ""
+}
+
+func (x *RaftLogEntry) GetTimestampUnixMs() int64 {
+	if x != nil {
+		return x.TimestampUnixMs
+	}
+	return 0
+}
+
+type AppendEntriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Term          int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	LeaderId      string                 `protobuf:"bytes,2,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	PrevLogIndex  int64                  `protobuf:"varint,3,opt,name=prev_log_index,json=prevLogIndex,proto3" json:"prev_log_index,omitempty"`
+	PrevLogTerm   int64                  `protobuf:"varint,4,opt,name=prev_log_term,json=prevLogTerm,proto3" json:"prev_log_term,omitempty"`
+	Entries       []*RaftLogEntry        `protobuf:"bytes,5,rep,name=entries,proto3" json:"entries,omitempty"`
+	LeaderCommit  int64                  `protobuf:"varint,6,opt,name=leader_commit,json=leaderCommit,proto3" json:"leader_commit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppendEntriesRequest) Reset() {
+	*x = AppendEntriesRequest{}
+	mi := &file_proto_robot_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppendEntriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppendEntriesRequest) ProtoMessage() {}
+
+func (x *AppendEntriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppendEntriesRequest.ProtoReflect.Descriptor instead.
+func (*AppendEntriesRequest) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AppendEntriesRequest) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *AppendEntriesRequest) GetLeaderId() string {
+	if x != nil {
+		return x.LeaderId
+	}
+	return ""
+}
+
+func (x *AppendEntriesRequest) GetPrevLogIndex() int64 {
+	if x != nil {
+		return x.PrevLogIndex
+	}
+	return 0
+}
+
+func (x *AppendEntriesRequest) GetPrevLogTerm() int64 {
+	if x != nil {
+		return x.PrevLogTerm
+	}
+	return 0
+}
+
+func (x *AppendEntriesRequest) GetEntries() []*RaftLogEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *AppendEntriesRequest) GetLeaderCommit() int64 {
+	if x != nil {
+		return x.LeaderCommit
+	}
+	return 0
+}
+
+type AppendEntriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Term          int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppendEntriesResponse) Reset() {
+	*x = AppendEntriesResponse{}
+	mi := &file_proto_robot_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppendEntriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppendEntriesResponse) ProtoMessage() {}
+
+func (x *AppendEntriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppendEntriesResponse.ProtoReflect.Descriptor instead.
+func (*AppendEntriesResponse) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AppendEntriesResponse) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *AppendEntriesResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 var File_proto_robot_proto protoreflect.FileDescriptor
 
 const file_proto_robot_proto_rawDesc = "" +
@@ -734,14 +1058,40 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12#\n" +
 	"\rlamport_clock\x18\x03 \x01(\x03R\flamportClock\".\n" +
 	"\x10PeerSyncResponse\x12\x1a\n" +
-	"\breceived\x18\x01 \x01(\bR\breceived2\x8c\x02\n" +
+	"\breceived\x18\x01 \x01(\bR\breceived\"\x8e\x01\n" +
+	"\vVoteRequest\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12!\n" +
+	"\fcandidate_id\x18\x02 \x01(\tR\vcandidateId\x12$\n" +
+	"\x0elast_log_index\x18\x03 \x01(\x03R\flastLogIndex\x12\"\n" +
+	"\rlast_log_term\x18\x04 \x01(\x03R\vlastLogTerm\"E\n" +
+	"\fVoteResponse\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12!\n" +
+	"\fvote_granted\x18\x02 \x01(\bR\vvoteGranted\"\x83\x01\n" +
+	"\fRaftLogEntry\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12\x18\n" +
+	"\acommand\x18\x02 \x01(\fR\acommand\x12\x19\n" +
+	"\blog_type\x18\x03 \x01(\tR\alogType\x12*\n" +
+	"\x11timestamp_unix_ms\x18\x04 \x01(\x03R\x0ftimestampUnixMs\"\xe5\x01\n" +
+	"\x14AppendEntriesRequest\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12\x1b\n" +
+	"\tleader_id\x18\x02 \x01(\tR\bleaderId\x12$\n" +
+	"\x0eprev_log_index\x18\x03 \x01(\x03R\fprevLogIndex\x12\"\n" +
+	"\rprev_log_term\x18\x04 \x01(\x03R\vprevLogTerm\x12-\n" +
+	"\aentries\x18\x05 \x03(\v2\x13.swarm.RaftLogEntryR\aentries\x12#\n" +
+	"\rleader_commit\x18\x06 \x01(\x03R\fleaderCommit\"E\n" +
+	"\x15AppendEntriesResponse\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess2\x8c\x02\n" +
 	"\fRobotService\x129\n" +
 	"\x0eMoveToPosition\x12\x12.swarm.MoveRequest\x1a\x13.swarm.MoveResponse\x12<\n" +
 	"\rGetSensorData\x12\x14.swarm.SensorRequest\x1a\x15.swarm.SensorResponse\x12?\n" +
 	"\x0eGetNetworkData\x12\x15.swarm.NetworkRequest\x1a\x16.swarm.NetworkResponse\x12B\n" +
 	"\rSendHeartbeat\x12\x17.swarm.HeartbeatRequest\x1a\x18.swarm.HeartbeatResponse2J\n" +
 	"\vPeerService\x12;\n" +
-	"\bSyncData\x12\x16.swarm.PeerSyncRequest\x1a\x17.swarm.PeerSyncResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
+	"\bSyncData\x12\x16.swarm.PeerSyncRequest\x1a\x17.swarm.PeerSyncResponse2\x91\x01\n" +
+	"\vRaftService\x126\n" +
+	"\vRequestVote\x12\x12.swarm.VoteRequest\x1a\x13.swarm.VoteResponse\x12J\n" +
+	"\rAppendEntries\x12\x1b.swarm.AppendEntriesRequest\x1a\x1c.swarm.AppendEntriesResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
 
 var (
 	file_proto_robot_proto_rawDescOnce sync.Once
@@ -755,39 +1105,49 @@ func file_proto_robot_proto_rawDescGZIP() []byte {
 	return file_proto_robot_proto_rawDescData
 }
 
-var file_proto_robot_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_proto_robot_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_proto_robot_proto_goTypes = []any{
-	(*MoveRequest)(nil),       // 0: swarm.MoveRequest
-	(*MoveResponse)(nil),      // 1: swarm.MoveResponse
-	(*SensorRequest)(nil),     // 2: swarm.SensorRequest
-	(*ObjectData)(nil),        // 3: swarm.ObjectData
-	(*SensorResponse)(nil),    // 4: swarm.SensorResponse
-	(*NetworkRequest)(nil),    // 5: swarm.NetworkRequest
-	(*NetworkData)(nil),       // 6: swarm.NetworkData
-	(*NetworkResponse)(nil),   // 7: swarm.NetworkResponse
-	(*HeartbeatRequest)(nil),  // 8: swarm.HeartbeatRequest
-	(*HeartbeatResponse)(nil), // 9: swarm.HeartbeatResponse
-	(*PeerSyncRequest)(nil),   // 10: swarm.PeerSyncRequest
-	(*PeerSyncResponse)(nil),  // 11: swarm.PeerSyncResponse
+	(*MoveRequest)(nil),           // 0: swarm.MoveRequest
+	(*MoveResponse)(nil),          // 1: swarm.MoveResponse
+	(*SensorRequest)(nil),         // 2: swarm.SensorRequest
+	(*ObjectData)(nil),            // 3: swarm.ObjectData
+	(*SensorResponse)(nil),        // 4: swarm.SensorResponse
+	(*NetworkRequest)(nil),        // 5: swarm.NetworkRequest
+	(*NetworkData)(nil),           // 6: swarm.NetworkData
+	(*NetworkResponse)(nil),       // 7: swarm.NetworkResponse
+	(*HeartbeatRequest)(nil),      // 8: swarm.HeartbeatRequest
+	(*HeartbeatResponse)(nil),     // 9: swarm.HeartbeatResponse
+	(*PeerSyncRequest)(nil),       // 10: swarm.PeerSyncRequest
+	(*PeerSyncResponse)(nil),      // 11: swarm.PeerSyncResponse
+	(*VoteRequest)(nil),           // 12: swarm.VoteRequest
+	(*VoteResponse)(nil),          // 13: swarm.VoteResponse
+	(*RaftLogEntry)(nil),          // 14: swarm.RaftLogEntry
+	(*AppendEntriesRequest)(nil),  // 15: swarm.AppendEntriesRequest
+	(*AppendEntriesResponse)(nil), // 16: swarm.AppendEntriesResponse
 }
 var file_proto_robot_proto_depIdxs = []int32{
 	3,  // 0: swarm.SensorResponse.objects:type_name -> swarm.ObjectData
 	6,  // 1: swarm.NetworkResponse.network_conditions:type_name -> swarm.NetworkData
-	0,  // 2: swarm.RobotService.MoveToPosition:input_type -> swarm.MoveRequest
-	2,  // 3: swarm.RobotService.GetSensorData:input_type -> swarm.SensorRequest
-	5,  // 4: swarm.RobotService.GetNetworkData:input_type -> swarm.NetworkRequest
-	8,  // 5: swarm.RobotService.SendHeartbeat:input_type -> swarm.HeartbeatRequest
-	10, // 6: swarm.PeerService.SyncData:input_type -> swarm.PeerSyncRequest
-	1,  // 7: swarm.RobotService.MoveToPosition:output_type -> swarm.MoveResponse
-	4,  // 8: swarm.RobotService.GetSensorData:output_type -> swarm.SensorResponse
-	7,  // 9: swarm.RobotService.GetNetworkData:output_type -> swarm.NetworkResponse
-	9,  // 10: swarm.RobotService.SendHeartbeat:output_type -> swarm.HeartbeatResponse
-	11, // 11: swarm.PeerService.SyncData:output_type -> swarm.PeerSyncResponse
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	14, // 2: swarm.AppendEntriesRequest.entries:type_name -> swarm.RaftLogEntry
+	0,  // 3: swarm.RobotService.MoveToPosition:input_type -> swarm.MoveRequest
+	2,  // 4: swarm.RobotService.GetSensorData:input_type -> swarm.SensorRequest
+	5,  // 5: swarm.RobotService.GetNetworkData:input_type -> swarm.NetworkRequest
+	8,  // 6: swarm.RobotService.SendHeartbeat:input_type -> swarm.HeartbeatRequest
+	10, // 7: swarm.PeerService.SyncData:input_type -> swarm.PeerSyncRequest
+	12, // 8: swarm.RaftService.RequestVote:input_type -> swarm.VoteRequest
+	15, // 9: swarm.RaftService.AppendEntries:input_type -> swarm.AppendEntriesRequest
+	1,  // 10: swarm.RobotService.MoveToPosition:output_type -> swarm.MoveResponse
+	4,  // 11: swarm.RobotService.GetSensorData:output_type -> swarm.SensorResponse
+	7,  // 12: swarm.RobotService.GetNetworkData:output_type -> swarm.NetworkResponse
+	9,  // 13: swarm.RobotService.SendHeartbeat:output_type -> swarm.HeartbeatResponse
+	11, // 14: swarm.PeerService.SyncData:output_type -> swarm.PeerSyncResponse
+	13, // 15: swarm.RaftService.RequestVote:output_type -> swarm.VoteResponse
+	16, // 16: swarm.RaftService.AppendEntries:output_type -> swarm.AppendEntriesResponse
+	10, // [10:17] is the sub-list for method output_type
+	3,  // [3:10] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_robot_proto_init() }
@@ -801,9 +1161,9 @@ func file_proto_robot_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_robot_proto_rawDesc), len(file_proto_robot_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   17,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_proto_robot_proto_goTypes,
 		DependencyIndexes: file_proto_robot_proto_depIdxs,
