@@ -43,6 +43,7 @@ Specifically, there should be the following services:
     * GetRobotData: visualiser requests for robot data relevant to the visualiser from the world.
 * PeerService: used for peer-to-peer communication directly between robots.
     * SyncData: robot sends a synchronization payload to a neighboring robot, which is subjected to the simulated network conditions.
+    * RouteMessage: robot forwards a serialized Raft RPC (or other control-plane message) toward a destination robot via multi-hop mesh routing.
 * RaftService: used for robot-to-robot consensus communication directly between robots on a dedicated service.
     * RequestVote: candidate robots request votes during election.
     * AppendEntries: leaders replicate log entries and send heartbeat-style consistency checks.
@@ -67,7 +68,11 @@ In the control loop, robots evaluate their peers based on `GetNetworkData`, and 
 
 ### Raft Consensus Communication
 Robots also host a dedicated `RaftService` on port `:50053` for consensus messages (`RequestVote`, `AppendEntries`).  
-Peer selection for Raft follows the same world-derived neighbor discovery path as gossip (network conditions refreshed via the heartbeat tick), and applies the same simulated reliability/latency/bandwidth constraints before each Raft RPC.
+Raft traffic is now routed through a **decentralized mesh routing layer** so that leaders and candidates can reach *all* peers in the swarm, not just physically adjacent ones. Each robot maintains a `RoutingTable` built via distance-vector (Bellman-Ford) route advertisements exchanged during gossip. Raft RPCs are serialized, wrapped in a `RoutedMessageRequest` envelope with a TTL, and forwarded hop-by-hop through `PeerService.RouteMessage` on `:50052`. Per-hop network constraints (latency, bandwidth, reliability) are applied at each intermediate robot.
+State transitions (Follower, Candidate, Leader) are governed by a 250ms sync tick, an 8-13s jittered election timeout (increased from 4-7s to accommodate multi-hop latency), and a 10s leader ping interval to maintain consensus.
+
+### Raft and Network Testing
+To ensure the robustness of the Raft implementation and the multi-hop routing layer without introducing test flakiness from temporal conditions, a comprehensive test suite (`Robot/raft_*_test.go`, `Robot/network_test.go`) directly drives the state machine APIs (e.g., `HandleRequestVote`, `HandleAppendEntries`, `HandleRouteMessage`). It bypasses tickers, simulates network constraints and partitions by artificially manipulating `lastLeaderSeenAt`, and dynamically forces deterministic splits and routing converge scenarios. Test design principles are documented in `Robot/raft_tests/README.md`.
 
 ## World
 The world subproject serves as the central authority for the simulation. It should be written in Go.  
@@ -100,6 +105,7 @@ Major technical and design decisions are tracked in `docs/adr/`:
 | [003](adr/003-world-engine-obstacle-authority.md) | World Engine Obstacle Authority | The World Engine is the sole source of obstacle data; robots receive proximity-filtered sensor data only. |
 | [004](adr/004-peer-to-peer-network-simulation.md) | Peer-to-Peer Network Simulation | Robots host a `PeerService` gRPC server directly, while the World Engine acts as a network oracle supplying distance-based bandwidth, latency, and reliability metrics. |
 | [005](adr/005-dedicated-raft-service-with-shared-network-constraints.md) | Dedicated Raft Service with Shared Network Constraints | Robots keep main gossip architecture while adding dedicated constrained Raft traffic over `RaftService` with no status endpoint. |
+| [006](adr/006-decentralized-mesh-routing.md) | Decentralized Mesh Routing | Distance-vector routing layer enabling multi-hop Raft communication across the entire swarm via `PeerService.RouteMessage`. |
 
 # Current Implementation State
 
@@ -113,4 +119,5 @@ The following features are implemented and running in the current Docker Compose
 - **Visualiser dashboard**: The React+PixiJS UI renders environment boundary, obstacles (red fill), and robots (green triangles) in real-time via WebSocket.
 - **Simulated network constraints**: The World Engine's `GetNetworkData` calculates per-robot peer conditions based on Euclidean distance. Max communication range is `250.0` units with linear degradation of bandwidth (50→1 Mbps), latency (5→250 ms), and reliability (1.0→0.5).
 - **Robot P2P sync**: Each robot hosts a `PeerService` gRPC server on port `:50052`. Every 2 seconds, it fetches peer conditions from the World Engine and dispatches a `SyncData` call to each in-range neighbor, subject to simulated packet drops (reliability), and `time.Sleep`-based delay (latency + bandwidth transfer time for a 1MB payload). The sync now includes a `LamportClock` to maintain logical time across the swarm.
-- **Robot Raft service**: Each robot hosts a dedicated `RaftService` gRPC server on port `:50053` and runs a 250 ms Raft tick. Raft peers are sourced from main neighbor discovery (fed by heartbeat-driven world network updates), and `RequestVote`/`AppendEntries` calls are subjected to the same simulated network constraints model as gossip.
+- **Mesh routing layer**: Each robot maintains a `RoutingTable` (distance-vector) that is advertised via gossip. Routes have a 10s expiry. `PeerService.RouteMessage` wraps serialized Raft RPCs in a `RoutedMessageRequest` envelope with TTL and forwards them hop-by-hop until they reach the destination.
+- **Robot Raft service**: Each robot hosts a dedicated `RaftService` gRPC server on port `:50053` and runs a 250 ms Raft tick. Raft now iterates all reachable peers from the routing table (not just direct neighbours) and sends traffic via the mesh router. Election timeout is 8-13s to accommodate multi-hop latency.

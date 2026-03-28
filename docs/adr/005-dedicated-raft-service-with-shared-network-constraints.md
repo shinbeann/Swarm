@@ -44,5 +44,15 @@ Trade-offs:
 
 Operational implications:
 
-- Raft cadence remains at 250 ms and gossip cadence remains unchanged.
-- Documentation must describe both services and the shared network-constraint model.
+- Continual background network constraint enforcement applies shared packet drop, latency, and bandwidth limits to Raft logic.
+
+### Raft Algorithm and Timers
+
+The implemented Raft algorithm operates using a push-based model tied directly to the robot's main event loops. State transitions (Follower, Candidate, Leader) and data replication are governed by a specific set of timers to maintain consensus:
+
+1.  **Raft Sync Tick Interval (`250ms`)**: The primary cadence for Raft coordination. Every 250ms, the robot checks if its election timeout has expired (potentially starting a new election) and synchronizes with known peers (sending `RequestVote` if Candidate, or `AppendEntries` if Leader).
+2.  **Election Timeout (`4s - 7s`)**: Followers expect to hear from the Leader within this window. It is composed of a minimum timeout of 4 seconds plus a random jitter of up to 3 seconds. The jitter prevents split votes during elections. If the timeout expires without communication from a valid Leader, the Follower converts to a Candidate and requests votes.
+3.  **Leader Ping Interval (`10s`)**: To maintain authority in absence of actual append payloads, the Leader automatically generates a lightweight `leader_ping` log entry to replicate to followers if 10 seconds elapse without any other outbound events. This ensures followers' election timers are consistently reset.
+4.  **Data Replication Constraints**: Both `RequestVote` and `AppendEntries` RPC calls are subject to the same simulated network restrictions (latency, packet drop based on reliability, and simulated bandwidth limits for a 1KB control plane payload) as the primary gossip engine.
+
+- Documentation must describe both services, the shared network-constraint model, and the detailed Raft interaction loops.
