@@ -448,11 +448,14 @@ func (x *NetworkResponse) GetNetworkConditions() []*NetworkData {
 }
 
 type HeartbeatRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RobotId       string                 `protobuf:"bytes,1,opt,name=robot_id,json=robotId,proto3" json:"robot_id,omitempty"`
-	X             float64                `protobuf:"fixed64,2,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float64                `protobuf:"fixed64,3,opt,name=y,proto3" json:"y,omitempty"`
-	Heading       float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	RobotId string                 `protobuf:"bytes,1,opt,name=robot_id,json=robotId,proto3" json:"robot_id,omitempty"`
+	X       float64                `protobuf:"fixed64,2,opt,name=x,proto3" json:"x,omitempty"`
+	Y       float64                `protobuf:"fixed64,3,opt,name=y,proto3" json:"y,omitempty"`
+	Heading float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
+	// Leader ID this robot currently believes is authoritative.
+	// Empty when no leader is currently known.
+	KnownLeaderId string `protobuf:"bytes,5,opt,name=known_leader_id,json=knownLeaderId,proto3" json:"known_leader_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -513,6 +516,13 @@ func (x *HeartbeatRequest) GetHeading() float64 {
 		return x.Heading
 	}
 	return 0
+}
+
+func (x *HeartbeatRequest) GetKnownLeaderId() string {
+	if x != nil {
+		return x.KnownLeaderId
+	}
+	return ""
 }
 
 type HeartbeatResponse struct {
@@ -1170,12 +1180,13 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\alatency\x18\x03 \x01(\x01R\alatency\x12 \n" +
 	"\vreliability\x18\x04 \x01(\x01R\vreliability\"T\n" +
 	"\x0fNetworkResponse\x12A\n" +
-	"\x12network_conditions\x18\x01 \x03(\v2\x12.swarm.NetworkDataR\x11networkConditions\"c\n" +
+	"\x12network_conditions\x18\x01 \x03(\v2\x12.swarm.NetworkDataR\x11networkConditions\"\x8b\x01\n" +
 	"\x10HeartbeatRequest\x12\x19\n" +
 	"\brobot_id\x18\x01 \x01(\tR\arobotId\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
 	"\x01y\x18\x03 \x01(\x01R\x01y\x12\x18\n" +
-	"\aheading\x18\x04 \x01(\x01R\aheading\"c\n" +
+	"\aheading\x18\x04 \x01(\x01R\aheading\x12&\n" +
+	"\x0fknown_leader_id\x18\x05 \x01(\tR\rknownLeaderId\"c\n" +
 	"\x11HeartbeatResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +

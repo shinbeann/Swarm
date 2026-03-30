@@ -63,6 +63,9 @@ message HeartbeatRequest {
   double x = 2;
   double y = 3;
   double heading = 4;
+  // Leader ID this robot currently believes is authoritative.
+  // Empty when no leader is currently known.
+  string known_leader_id = 5;
 }
 
 message HeartbeatResponse {

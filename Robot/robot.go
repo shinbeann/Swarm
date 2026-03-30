@@ -152,12 +152,17 @@ func (r *Robot) Run(ctx context.Context) {
 func (r *Robot) tick(ctx context.Context) {
 	r.Clock.Tick()
 
+	r.mu.Lock()
+	knownLeaderID := r.knownLeaderID
+	r.mu.Unlock()
+
 	// Heartbeat — WorldEngine returns the canonical position
 	heartbeatResp, err := r.Client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
-		RobotId: r.ID,
-		X:       r.X,
-		Y:       r.Y,
-		Heading: r.Heading,
+		RobotId:       r.ID,
+		X:             r.X,
+		Y:             r.Y,
+		Heading:       r.Heading,
+		KnownLeaderId: knownLeaderID,
 	})
 	if err != nil {
 		log.Printf("worldheartbeat error: %v", err)
