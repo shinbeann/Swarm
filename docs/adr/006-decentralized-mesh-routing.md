@@ -42,6 +42,8 @@ Introduce a **decentralized distance-vector mesh routing layer** that enables mu
 
 5. **Adjusted timeouts**: Election timeout increased from 4-7s to 8-13s to account for multi-hop RTT.
 
+6. **Dynamic quorum from reachable topology**: Raft quorum is not computed from a fixed swarm size. Each robot derives `totalNodes` from the peers it can currently route to, plus itself, and uses that value for vote majorities and log-commit majorities. This is necessary because the swarm is elastic, routing knowledge converges gradually through gossip, and partitions can hide parts of the cluster from a robot's local view.
+
 ## Consequences
 
 Benefits:
@@ -55,5 +57,6 @@ Trade-offs:
 - Multi-hop RPCs incur cumulative per-hop latency and compounding drop probability.
 - Larger Raft timeouts reduce failover responsiveness.
 - Routing convergence takes multiple gossip cycles proportional to network diameter.
+- Quorum size can differ temporarily between robots until routing converges, so leadership and commit decisions depend on each robot's current reachable set rather than a globally fixed membership list.
 
 Supersedes: This ADR extends ADR-005. The `RaftService` on `:50053` still exists for backward compatibility but is no longer the primary Raft transport; all Raft traffic is now tunneled through `PeerService.RouteMessage` on `:50052`.
