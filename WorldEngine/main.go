@@ -22,7 +22,7 @@ var (
 )
 
 const (
-	robotSpeed      = 50.0
+	robotSpeed      = 20.0
 	simTickMs       = 30
 	simDt           = simTickMs / 1000.0
 	discoveryRadius = 10.0  // must be within this distance to detect a landmark
@@ -229,7 +229,7 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 	}
 
 	var conditions []*pb.NetworkData
-	maxRange := 250.0
+	maxRange := 750.0 // a very high number to ensure that all robots will be in range of each other through multi-hopping, but still show some variation in conditions based on distance.
 
 	for id, state := range s.robots {
 		if id == reqRobotID {
@@ -245,7 +245,7 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 				TargetRobotId: id,
 				Bandwidth:     50.0 - (49.0 * ratio),
 				Latency:       5.0 + (245.0 * ratio),
-				Reliability:   1.0 - (0.5 * ratio),
+				Reliability:   1.0 - (0.0 * ratio), // TODO: add back some reliability degradation based on distance if desired
 			})
 		}
 	}

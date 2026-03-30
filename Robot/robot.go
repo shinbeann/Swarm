@@ -91,8 +91,8 @@ type Robot struct {
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r := &Robot{
 		ID:                  id,
-		X:                   rand.Float64() * 800,
-		Y:                   rand.Float64() * 600,
+		X:                   100 + rand.Float64()*50,
+		Y:                   100 + rand.Float64()*50,
 		Heading:             rand.Float64() * 2 * math.Pi,
 		Client:              client,
 		Clock:               NewLamportClock(),

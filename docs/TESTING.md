@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory (`raft_tests`) contains the test suite and documentation for the Raft consensus implementation in `Robot/robot.go`. Because the Swarm Project's `Robot` is part of `package main` and relies on unexported methods (e.g., `maybeStartElection`, `handleVoteResponse`, `advanceCommitIndexLocked`), testing it from a separate package folder is anti-idiomatic in Go.
+Documenting the test suite and documentation for the Raft consensus implementation in `Robot/robot.go`.  
 
 Therefore, the actual Go test files are located alongside `robot.go` in the parent `Robot` directory, prefixed with `raft_` to clearly distinguish them.
 
@@ -15,6 +15,22 @@ Therefore, the actual Go test files are located alongside `robot.go` in the pare
 - `Robot/raft_follower_test.go`: Follower lag, catch-up, and heartbeat idempotency.
 - `Robot/raft_term_safety_test.go`: Step-down on higher terms, rejection of lower terms.
 - `Robot/raft_log_consistency_test.go`: Log truncation, conflicts, missing entries, commit math.
+
+## Implemented Scenarios
+
+The suite is broken down strictly by behavior domains:
+
+| File | Focus Area | Covered Scenarios |
+|---|---|---|
+| `raft_election_test.go` | Elections and Candidate Mechanics | Static stability, stale leader demotion, stale log candidate rejection, split vote resolution, term safety demotions, double-vote prevention. |
+| `raft_leader_failure_test.go` | Network Partitions and Leader Death | Resolving majority-replicated but uncommitted logs upon leader death, overwriting minority-replicated logs when partitioned, and a minority follower with uncommitted logs successfully getting elected and replicating those uncommitted logs to the rest of the cluster. |
+| `raft_leader_init_test.go` | Term Beginnings | Leader state initialization (`nextIndex`/`matchIndex`), successful heartbeats, failure to out-of-sync followers, and multi-step nextIndex backtracking. |
+| `raft_follower_test.go` | Follower Reactivity | Rejection of laggy prevLogIndex, catching up on missing logs, correct math handling for updating `commitIndex`, and idempotency (duplicate drops). |
+| `raft_term_safety_test.go` | Universal Protection | Automatic Follower transition when observing higher terms in responses or requests, rejecting requests from lower terms. |
+| `raft_log_consistency_test.go` | Append Math | Exact log appending, excess entry truncation, conflict resolutions, and Raft's edge-case rule forbidding direct commits of previous-term entries. |
+
+
+NOTE: The test suite proves what happens with a static raft system. But with dynamically moving robots, topologies and network conditions change. The behaviour under such dynamism is not yet tested. Furthermore, behaviour might be correct, but the performance, disruption and recovery time under such conditions is also not yet measured. These are important areas for future test expansion.  
 
 ## Test Design Principles
 
