@@ -49,7 +49,12 @@ func main() {
 
 	// Serve the static frontend files
 	fs := http.FileServer(http.Dir(*staticDir))
-	http.Handle("/", fs)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		fs.ServeHTTP(w, r)
+	})
 
 	log.Printf("Starting Visualiser Go proxy on port %s...", *port)
 	if err := http.ListenAndServe(":"+*port, nil); err != nil {

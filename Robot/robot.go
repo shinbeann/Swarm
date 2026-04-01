@@ -15,6 +15,7 @@ import (
 	pb "github.com/yihre/swarm-project/communications/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 )
 
 type raftNodeState int
@@ -27,8 +28,8 @@ const (
 
 const (
 	raftLeaderPingInterval = 10 * time.Second
-	raftElectionMinTimeout = 4 * time.Second
-	raftElectionJitter     = 3 * time.Second
+	raftElectionMinTimeout = 8 * time.Second // Increased for multi-hop mesh latency.
+	raftElectionJitter     = 5 * time.Second // Increased for multi-hop mesh latency.
 	raftSyncInterval       = 250 * time.Millisecond
 	gossipPayloadMb        = 1.0   // Simulated gossip sync payload size.
 	raftPayloadMb          = 0.001 // Small control-plane Raft RPC payload size approximation.
@@ -65,6 +66,10 @@ type Robot struct {
 	nearObstacle  bool
 	obstacleAngle float64
 
+	// Mesh routing layer.
+	routingTable *RoutingTable
+	meshRouter   *MeshRouter
+
 	// Raft-like coordination state.
 	raftState          raftNodeState
 	raftTerm           int64
@@ -86,8 +91,8 @@ type Robot struct {
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r := &Robot{
 		ID:                  id,
-		X:                   rand.Float64() * 800,
-		Y:                   rand.Float64() * 600,
+		X:                   100 + rand.Float64()*50,
+		Y:                   100 + rand.Float64()*50,
 		Heading:             rand.Float64() * 2 * math.Pi,
 		Client:              client,
 		Clock:               NewLamportClock(),
@@ -109,6 +114,8 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 		totalNodes:          1,
 	}
 
+	r.routingTable = NewRoutingTable(RobotID(id))
+	r.meshRouter = NewMeshRouter(r)
 	r.gossip = NewGossipEngine(r, r.sendGossipMessage)
 	r.gossip.Start()
 	return r
@@ -145,12 +152,17 @@ func (r *Robot) Run(ctx context.Context) {
 func (r *Robot) tick(ctx context.Context) {
 	r.Clock.Tick()
 
+	r.mu.Lock()
+	knownLeaderID := r.knownLeaderID
+	r.mu.Unlock()
+
 	// Heartbeat — WorldEngine returns the canonical position
 	heartbeatResp, err := r.Client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
-		RobotId: r.ID,
-		X:       r.X,
-		Y:       r.Y,
-		Heading: r.Heading,
+		RobotId:       r.ID,
+		X:             r.X,
+		Y:             r.Y,
+		Heading:       r.Heading,
+		KnownLeaderId: knownLeaderID,
 	})
 	if err != nil {
 		log.Printf("worldheartbeat error: %v", err)
@@ -323,14 +335,13 @@ func (r *Robot) OnPeerSync(req *pb.PeerSyncRequest) {
 }
 
 func (r *Robot) syncRaftWithPeers(ctx context.Context) {
+	// Still refresh direct-neighbour topology for peer tracking.
 	peerIDs := r.activeNeighbours()
-	conditions := make([]*pb.NetworkData, 0, len(peerIDs))
 	for _, peerID := range peerIDs {
-		if cond, ok := r.networkCondition(peerID); ok {
-			conditions = append(conditions, cond)
-		}
+		// Record direct neighbours in the routing table.
+		r.routingTable.RecordDirectNeighbour(peerID)
 	}
-	r.updatePeerTopology(conditions)
+	currentPeers := r.updateRaftPeerTopology()
 
 	r.mu.Lock()
 	state := r.raftState
@@ -343,32 +354,9 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 		return
 	}
 
-	for _, peerID := range peerIDs {
-		cond, ok := r.networkCondition(peerID)
-		if !ok {
-			continue
-		}
-		targetID := string(peerID)
-		latency := cond.GetLatency()
-		bandwidth := cond.GetBandwidth()
-		reliability := cond.GetReliability()
-
-		go func(tID string, lat, bw, rel float64) {
-			if !r.applyNetworkConstraints(tID, lat, bw, rel, raftPayloadMb, "Raft") {
-				return
-			}
-
-			raftAddr := tID + ":50053"
-			conn, err := grpc.NewClient(raftAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				return
-			}
-			defer conn.Close()
-
-			raftClient := pb.NewRaftServiceClient(conn)
-			rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
-			defer rpcCancel()
-
+	// Iterate the secure array of peers returned directly by updateRaftPeerTopology
+	for _, targetID := range currentPeers {
+		go func(tID string) {
 			r.mu.Lock()
 			currState := r.raftState
 			r.mu.Unlock()
@@ -379,29 +367,46 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 				if voteReq == nil {
 					return
 				}
-				resp, err := raftClient.RequestVote(rpcCtx, voteReq)
+				payload, err := proto.Marshal(voteReq)
 				if err != nil {
 					return
 				}
-				log.Printf("[Raft Send] %s -> %s RequestVote term=%d", r.ID, tID, voteReq.GetTerm())
-				r.handleVoteResponse(tID, resp)
+				respBytes, err := r.meshRouter.SendMessage(RobotID(tID), "RequestVote", payload)
+				if err != nil {
+					return
+				}
+				var resp pb.VoteResponse
+				if err := proto.Unmarshal(respBytes, &resp); err != nil {
+					return
+				}
+				log.Printf("[Raft Send] %s -> %s RequestVote term=%d (mesh)", r.ID, tID, voteReq.GetTerm())
+				r.handleVoteResponse(tID, &resp)
+
 			case raftLeader:
 				appendReq := r.buildAppendEntriesRequestForPeer(tID)
 				if appendReq == nil {
 					return
 				}
-				resp, err := raftClient.AppendEntries(rpcCtx, appendReq)
+				payload, err := proto.Marshal(appendReq)
 				if err != nil {
 					return
 				}
-				if len(appendReq.GetEntries()) == 0 {
-					log.Printf("[Raft Send] %s -> %s  heartbeat term=%d", r.ID, tID, appendReq.GetTerm())
-				} else {
-					log.Printf("[Raft Send] %s -> %s append term=%d entries=%d", r.ID, tID, appendReq.GetTerm(), len(appendReq.GetEntries()))
+				respBytes, err := r.meshRouter.SendMessage(RobotID(tID), "AppendEntries", payload)
+				if err != nil {
+					return
 				}
-				r.handleAppendResponse(tID, appendReq, resp)
+				var resp pb.AppendEntriesResponse
+				if err := proto.Unmarshal(respBytes, &resp); err != nil {
+					return
+				}
+				if len(appendReq.GetEntries()) == 0 {
+					log.Printf("[Raft Send] %s -> %s heartbeat term=%d (mesh)", r.ID, tID, appendReq.GetTerm())
+				} else {
+					log.Printf("[Raft Send] %s -> %s append term=%d entries=%d (mesh)", r.ID, tID, appendReq.GetTerm(), len(appendReq.GetEntries()))
+				}
+				r.handleAppendResponse(tID, appendReq, &resp)
 			}
-		}(targetID, latency, bandwidth, reliability)
+		}(targetID)
 	}
 }
 
@@ -447,26 +452,36 @@ func (r *Robot) maybeStartElection() {
 	log.Printf("[Raft] Robot %s started election for term %d", r.ID, r.raftTerm)
 }
 
-func (r *Robot) updatePeerTopology(conditions []*pb.NetworkData) {
+func (r *Robot) updateRaftPeerTopology() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.knownPeerIDs = make(map[string]struct{})
-	for _, cond := range conditions {
-		id := cond.GetTargetRobotId()
-		if id == "" || id == r.ID {
+	// Collect all reachable peers from the routing table (includes multi-hop).
+	allReachable := r.routingTable.GetAllReachable()
+
+	r.knownPeerIDs = make(map[string]struct{}, len(allReachable))
+	currentPeers := make([]string, 0, len(allReachable))
+
+	for id := range allReachable {
+		strID := string(id)
+		if strID == "" || strID == r.ID {
 			continue
 		}
-		r.knownPeerIDs[id] = struct{}{}
-		if _, ok := r.nextIndex[id]; !ok {
-			r.nextIndex[id] = int64(len(r.raftLog))
+		r.knownPeerIDs[strID] = struct{}{}
+		currentPeers = append(currentPeers, strID)
+
+		// If we haven't seen this peer before, initialize Raft tracking state for it.
+		// Assume new peers start with empty logs, so nextIndex should point to the end of our log and matchIndex should be -1.
+		if _, ok := r.nextIndex[strID]; !ok {
+			r.nextIndex[strID] = int64(len(r.raftLog))
 		}
-		if _, ok := r.matchIndex[id]; !ok {
-			r.matchIndex[id] = -1
+		if _, ok := r.matchIndex[strID]; !ok {
+			r.matchIndex[strID] = -1
 		}
 	}
 
 	r.totalNodes = len(r.knownPeerIDs) + 1
+	return currentPeers
 }
 
 func (r *Robot) buildVoteRequest() *pb.VoteRequest {

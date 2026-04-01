@@ -7,6 +7,9 @@ interface Robot {
     x: number;
     y: number;
     heading: number;
+    is_leader?: boolean;
+    communication_range?: number;
+    in_range_peer_ids?: string[];
 }
 
 interface Obstacle {
@@ -30,11 +33,63 @@ interface StatePayload {
 
 const LANDMARK_PREFIX = 'landmark:';
 
+const hslToHexColor = (h: number, s: number, l: number): number => {
+    const sat = s / 100;
+    const light = l / 100;
+    const chroma = (1 - Math.abs(2 * light - 1)) * sat;
+    const huePrime = h / 60;
+    const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+
+    if (huePrime >= 0 && huePrime < 1) {
+        r = chroma;
+        g = x;
+    } else if (huePrime >= 1 && huePrime < 2) {
+        r = x;
+        g = chroma;
+    } else if (huePrime >= 2 && huePrime < 3) {
+        g = chroma;
+        b = x;
+    } else if (huePrime >= 3 && huePrime < 4) {
+        g = x;
+        b = chroma;
+    } else if (huePrime >= 4 && huePrime < 5) {
+        r = x;
+        b = chroma;
+    } else {
+        r = chroma;
+        b = x;
+    }
+
+    const match = light - chroma / 2;
+    const toByte = (value: number) => Math.round((value + match) * 255);
+    const red = toByte(r);
+    const green = toByte(g);
+    const blue = toByte(b);
+    return (red << 16) | (green << 8) | blue;
+};
+
+const colorForRobot = (robotID: string): number => {
+    let hash = 2166136261;
+    for (let i = 0; i < robotID.length; i++) {
+        hash ^= robotID.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+
+    const hue = (hash >>> 0) % 360;
+    return hslToHexColor(hue, 85, 56);
+};
+
 function App() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const appRef = useRef<PIXI.Application | null>(null);
     const spritesRef = useRef<Map<string, PIXI.Graphics>>(new Map());
+    const labelsRef = useRef<Map<string, PIXI.Text>>(new Map());
     const envGraphicsRef = useRef<PIXI.Graphics | null>(null);
+    const commGraphicsRef = useRef<PIXI.Graphics | null>(null);
 
     const [env, setEnv] = useState<Environment>({ width: 1000, height: 1000, obstacles: [] });
     const [robotCount, setRobotCount] = useState(0);
@@ -48,8 +103,8 @@ function App() {
             const app = new PIXI.Application();
             await app.init({
                 canvas: canvasRef.current!,
-                width: 800,
-                height: 600,
+                width: 1000,
+                height: 1000,
                 backgroundColor: 0x111116,
                 resolution: window.devicePixelRatio || 1,
                 autoDensity: true,
@@ -58,6 +113,10 @@ function App() {
             const backgroundGraphics = new PIXI.Graphics();
             app.stage.addChild(backgroundGraphics);
             envGraphicsRef.current = backgroundGraphics;
+
+            const communicationGraphics = new PIXI.Graphics();
+            app.stage.addChild(communicationGraphics);
+            commGraphicsRef.current = communicationGraphics;
 
             appRef.current = app;
         };
@@ -100,6 +159,7 @@ function App() {
                 }
                 if (data.robots && appRef.current) {
                     updateRobots(data.robots, appRef.current);
+                    updateCommunicationOverlay(data.robots);
                     setRobotCount(data.robots.length);
                 }
             } catch (err) {
@@ -113,11 +173,11 @@ function App() {
     const updateEnvironment = (environment: Environment, graphics: PIXI.Graphics) => {
         graphics.clear();
 
-        const scaleX = 800 / environment.width;
-        const scaleY = 600 / environment.height;
+        const scaleX = 1000 / environment.width;
+        const scaleY = 1000 / environment.height;
 
         // Subtle background grid boundary
-        graphics.rect(0, 0, 800, 600);
+        graphics.rect(0, 0, 1000, 1000);
         graphics.stroke({ width: 2, color: 0x444455 });
 
         if (environment.obstacles) {
@@ -153,13 +213,68 @@ function App() {
         }
     };
 
+    const updateCommunicationOverlay = (robots: Robot[]) => {
+        const graphics = commGraphicsRef.current;
+        if (!graphics) return;
+
+        graphics.clear();
+
+        if (env.width <= 0 || env.height <= 0) return;
+
+        const scaleX = 1000 / env.width;
+        const scaleY = 1000 / env.height;
+        const robotsById = new Map<string, Robot>(robots.map((robot) => [robot.id, robot]));
+
+        const drawnPairs = new Set<string>();
+        robots.forEach((robot) => {
+            const peerIds = robot.in_range_peer_ids ?? [];
+            peerIds.forEach((peerId) => {
+                const peer = robotsById.get(peerId);
+                if (!peer) return;
+
+                const lowID = robot.id < peerId ? robot.id : peerId;
+                const highID = robot.id < peerId ? peerId : robot.id;
+                const pairKey = `${lowID}|${highID}`;
+                if (drawnPairs.has(pairKey)) return;
+
+                drawnPairs.add(pairKey);
+                const startX = robot.x * scaleX;
+                const startY = robot.y * scaleY;
+                const endX = peer.x * scaleX;
+                const endY = peer.y * scaleY;
+                const midX = (startX + endX) / 2;
+                const midY = (startY + endY) / 2;
+
+                graphics.moveTo(startX, startY);
+                graphics.lineTo(midX, midY);
+                graphics.stroke({ width: 2.4, color: colorForRobot(robot.id), alpha: 0.95 });
+
+                graphics.moveTo(midX, midY);
+                graphics.lineTo(endX, endY);
+                graphics.stroke({ width: 2.4, color: colorForRobot(peer.id), alpha: 0.95 });
+            });
+        });
+
+        robots.forEach((robot) => {
+            const range = robot.communication_range ?? 0;
+            if (range <= 0) return;
+
+            const radiusX = range * scaleX;
+            const radiusY = range * scaleY;
+
+            graphics.ellipse(robot.x * scaleX, robot.y * scaleY, radiusX, radiusY);
+            graphics.stroke({ width: 2.2, color: colorForRobot(robot.id), alpha: 0.78 });
+        });
+    };
+
     // Update logic
     const updateRobots = (robots: Robot[], app: PIXI.Application) => {
         const sprites = spritesRef.current;
+        const labels = labelsRef.current;
 
-        // Scale coords to canvas (assuming environment 1000x1000 -> 800x600 canvas)
-        const scaleX = 800 / env.width;
-        const scaleY = 600 / env.height;
+        // Scale coords to canvas (assuming environment 1000x1000 -> 1000x1000 canvas)
+        const scaleX = 1000 / env.width;
+        const scaleY = 1000 / env.height;
 
         // Track seen IDs to remove dead robots
         const seenIds = new Set<string>();
@@ -171,23 +286,47 @@ function App() {
             if (!sprite) {
                 // Create new robot sprite
                 sprite = new PIXI.Graphics();
+                app.stage.addChild(sprite);
+                sprites.set(robot.id, sprite);
+            }
 
-                // Triangle shape
+            let label = labels.get(robot.id);
+            if (!label) {
+                label = new PIXI.Text({
+                    text: '',
+                    style: {
+                        fontFamily: 'Courier New',
+                        fontSize: 14,
+                        fontWeight: '700',
+                        fill: 0xffffff,
+                        stroke: { color: 0x101014, width: 3 },
+                    },
+                });
+                label.anchor.set(0, 0.5);
+                app.stage.addChild(label);
+                labels.set(robot.id, label);
+            }
+
+            sprite.clear();
+            if (robot.is_leader) {
+                sprite.rect(-9, -9, 18, 18);
+            } else {
                 sprite.poly([
                     0, -10,
                     -8, 10,
                     8, 10
                 ]);
-                sprite.fill(0x00FF88);
-
-                app.stage.addChild(sprite);
-                sprites.set(robot.id, sprite);
             }
+            sprite.fill(colorForRobot(robot.id));
 
             // Update position and rotation
             sprite.x = robot.x * scaleX;
             sprite.y = robot.y * scaleY;
-            sprite.rotation = robot.heading;
+            sprite.rotation = robot.is_leader ? 0 : robot.heading;
+
+            label.text = robot.id.slice(0, 5);
+            label.x = sprite.x + 11;
+            label.y = sprite.y + 11;
         });
 
         // Clean up vanished robots
@@ -196,6 +335,13 @@ function App() {
                 app.stage.removeChild(sprite);
                 sprite.destroy();
                 sprites.delete(id);
+
+                const label = labels.get(id);
+                if (label) {
+                    app.stage.removeChild(label);
+                    label.destroy();
+                    labels.delete(id);
+                }
             }
         });
     };

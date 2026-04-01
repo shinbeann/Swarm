@@ -12,6 +12,7 @@ type GossipMessage struct {
 	SenderID  RobotID
 	Timestamp int
 	Entries   []*LandmarkEntry
+	Routes    map[string]int `json:"routes,omitempty"` // Routing advertisement: destination → hop count
 }
 
 type SendFunc func(to RobotID, msg *GossipMessage) error
@@ -64,11 +65,15 @@ func (ge *GossipEngine) gossipOnce() {
 		return
 	}
 
+	// Prune expired routes before building the advertisement.
+	ge.robot.routingTable.PruneExpired(routeExpiryTimeout)
+
 	target := active[rand.Intn(len(active))]
 	msg := &GossipMessage{
 		SenderID:  RobotID(ge.robot.ID),
 		Timestamp: ge.robot.Clock.Tick(),
 		Entries:   ge.robot.store.GetAll(),
+		Routes:    ge.robot.routingTable.BuildAdvertisement(),
 	}
 
 	if err := ge.send(target, msg); err != nil {
@@ -80,6 +85,14 @@ func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
 	ge.robot.Clock.Update(msg.Timestamp)
 	for _, entry := range msg.Entries {
 		ge.robot.store.Add(entry.ID, entry.Type, entry.Location, msg.SenderID, msg.Timestamp)
+	}
+
+	// Record sender as a direct 1-hop neighbour in the routing table.
+	ge.robot.routingTable.RecordDirectNeighbour(msg.SenderID)
+
+	// Merge sender's routing advertisement via distance-vector (Bellman-Ford).
+	if msg.Routes != nil {
+		ge.robot.routingTable.MergeAdvertisement(msg.SenderID, msg.Routes)
 	}
 }
 
