@@ -230,16 +230,13 @@ func (*RobotDataRequest) Descriptor() ([]byte, []int) {
 }
 
 type RobotInfo struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	X                  float64                `protobuf:"fixed64,2,opt,name=x,proto3" json:"x,omitempty"`
-	Y                  float64                `protobuf:"fixed64,3,opt,name=y,proto3" json:"y,omitempty"`
-	Heading            float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
-	IsLeader           bool                   `protobuf:"varint,5,opt,name=is_leader,json=isLeader,proto3" json:"is_leader,omitempty"`
-	CommunicationRange float64                `protobuf:"fixed64,6,opt,name=communication_range,json=communicationRange,proto3" json:"communication_range,omitempty"`
-	InRangePeerIds     []string               `protobuf:"bytes,7,rep,name=in_range_peer_ids,json=inRangePeerIds,proto3" json:"in_range_peer_ids,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	X             float64                `protobuf:"fixed64,2,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float64                `protobuf:"fixed64,3,opt,name=y,proto3" json:"y,omitempty"`
+	Heading       float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RobotInfo) Reset() {
@@ -298,27 +295,6 @@ func (x *RobotInfo) GetHeading() float64 {
 		return x.Heading
 	}
 	return 0
-}
-
-func (x *RobotInfo) GetIsLeader() bool {
-	if x != nil {
-		return x.IsLeader
-	}
-	return false
-}
-
-func (x *RobotInfo) GetCommunicationRange() float64 {
-	if x != nil {
-		return x.CommunicationRange
-	}
-	return 0
-}
-
-func (x *RobotInfo) GetInRangePeerIds() []string {
-	if x != nil {
-		return x.InRangePeerIds
-	}
-	return nil
 }
 
 type RobotDataResponse struct {
@@ -381,15 +357,12 @@ const file_proto_visualiser_proto_rawDesc = "" +
 	"\x01y\x18\x03 \x01(\x01R\x01y\x12\x14\n" +
 	"\x05width\x18\x04 \x01(\x01R\x05width\x12\x16\n" +
 	"\x06height\x18\x05 \x01(\x01R\x06height\"\x12\n" +
-	"\x10RobotDataRequest\"\xca\x01\n" +
+	"\x10RobotDataRequest\"Q\n" +
 	"\tRobotInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
 	"\x01y\x18\x03 \x01(\x01R\x01y\x12\x18\n" +
-	"\aheading\x18\x04 \x01(\x01R\aheading\x12\x1b\n" +
-	"\tis_leader\x18\x05 \x01(\bR\bisLeader\x12/\n" +
-	"\x13communication_range\x18\x06 \x01(\x01R\x12communicationRange\x12)\n" +
-	"\x11in_range_peer_ids\x18\a \x03(\tR\x0einRangePeerIds\"=\n" +
+	"\aheading\x18\x04 \x01(\x01R\aheading\"=\n" +
 	"\x11RobotDataResponse\x12(\n" +
 	"\x06robots\x18\x01 \x03(\v2\x10.swarm.RobotInfoR\x06robots2\xa3\x01\n" +
 	"\x11VisualiserService\x12K\n" +

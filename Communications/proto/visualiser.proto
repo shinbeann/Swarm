@@ -33,9 +33,6 @@ message RobotInfo {
   double x = 2;
   double y = 3;
   double heading = 4;
-  bool is_leader = 5;
-  double communication_range = 6;
-  repeated string in_range_peer_ids = 7;
 }
 
 message RobotDataResponse {

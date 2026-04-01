@@ -245,8 +245,7 @@ var RobotService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	PeerService_SyncData_FullMethodName     = "/swarm.PeerService/SyncData"
-	PeerService_RouteMessage_FullMethodName = "/swarm.PeerService/RouteMessage"
+	PeerService_SyncData_FullMethodName = "/swarm.PeerService/SyncData"
 )
 
 // PeerServiceClient is the client API for PeerService service.
@@ -256,7 +255,6 @@ const (
 // PeerService is hosted by the robots to communicate heavily constrained data with neighbors
 type PeerServiceClient interface {
 	SyncData(ctx context.Context, in *PeerSyncRequest, opts ...grpc.CallOption) (*PeerSyncResponse, error)
-	RouteMessage(ctx context.Context, in *RoutedMessageRequest, opts ...grpc.CallOption) (*RoutedMessageResponse, error)
 }
 
 type peerServiceClient struct {
@@ -277,16 +275,6 @@ func (c *peerServiceClient) SyncData(ctx context.Context, in *PeerSyncRequest, o
 	return out, nil
 }
 
-func (c *peerServiceClient) RouteMessage(ctx context.Context, in *RoutedMessageRequest, opts ...grpc.CallOption) (*RoutedMessageResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RoutedMessageResponse)
-	err := c.cc.Invoke(ctx, PeerService_RouteMessage_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // PeerServiceServer is the server API for PeerService service.
 // All implementations must embed UnimplementedPeerServiceServer
 // for forward compatibility.
@@ -294,7 +282,6 @@ func (c *peerServiceClient) RouteMessage(ctx context.Context, in *RoutedMessageR
 // PeerService is hosted by the robots to communicate heavily constrained data with neighbors
 type PeerServiceServer interface {
 	SyncData(context.Context, *PeerSyncRequest) (*PeerSyncResponse, error)
-	RouteMessage(context.Context, *RoutedMessageRequest) (*RoutedMessageResponse, error)
 	mustEmbedUnimplementedPeerServiceServer()
 }
 
@@ -307,9 +294,6 @@ type UnimplementedPeerServiceServer struct{}
 
 func (UnimplementedPeerServiceServer) SyncData(context.Context, *PeerSyncRequest) (*PeerSyncResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SyncData not implemented")
-}
-func (UnimplementedPeerServiceServer) RouteMessage(context.Context, *RoutedMessageRequest) (*RoutedMessageResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RouteMessage not implemented")
 }
 func (UnimplementedPeerServiceServer) mustEmbedUnimplementedPeerServiceServer() {}
 func (UnimplementedPeerServiceServer) testEmbeddedByValue()                     {}
@@ -350,24 +334,6 @@ func _PeerService_SyncData_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PeerService_RouteMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RoutedMessageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PeerServiceServer).RouteMessage(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: PeerService_RouteMessage_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PeerServiceServer).RouteMessage(ctx, req.(*RoutedMessageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // PeerService_ServiceDesc is the grpc.ServiceDesc for PeerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -378,10 +344,6 @@ var PeerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncData",
 			Handler:    _PeerService_SyncData_Handler,
-		},
-		{
-			MethodName: "RouteMessage",
-			Handler:    _PeerService_RouteMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

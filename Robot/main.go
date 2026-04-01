@@ -28,14 +28,8 @@ func (s *peerServer) SyncData(ctx context.Context, req *pb.PeerSyncRequest) (*pb
 	if s.robot != nil {
 		s.robot.OnPeerSync(req)
 	}
+	// log.Printf("[P2P Recv] Robot %s received sync from %s", *robotID, req.GetSenderId())
 	return &pb.PeerSyncResponse{Received: true}, nil
-}
-
-func (s *peerServer) RouteMessage(ctx context.Context, req *pb.RoutedMessageRequest) (*pb.RoutedMessageResponse, error) {
-	if s.robot == nil || s.robot.meshRouter == nil {
-		return &pb.RoutedMessageResponse{Delivered: false}, nil
-	}
-	return s.robot.meshRouter.HandleRouteMessage(ctx, req), nil
 }
 
 func (s *raftServer) RequestVote(ctx context.Context, req *pb.VoteRequest) (*pb.VoteResponse, error) {

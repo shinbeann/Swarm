@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sort"
 	"sync"
 	"syscall"
 	"time"
@@ -23,11 +22,10 @@ var (
 )
 
 const (
-	robotSpeed         = 20.0
-	simTickMs          = 30
-	simDt              = simTickMs / 1000.0
-	discoveryRadius    = 10.0  // must be within this distance to detect a landmark
-	communicationRange = 250.0 // source of truth for physical wireless reachability
+	robotSpeed      = 50.0
+	simTickMs       = 30
+	simDt           = simTickMs / 1000.0
+	discoveryRadius = 10.0  // must be within this distance to detect a landmark
 )
 
 // -------------------------------------------------------------------------
@@ -49,8 +47,6 @@ type WorldLandmark struct {
 type RobotState struct {
 	Info     *pb.RobotInfo
 	LastSeen time.Time
-
-	LastKnownLeaderID string
 
 	HasTarget     bool
 	TargetX       float64
@@ -143,7 +139,6 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 	}
 
 	state.LastSeen = time.Now()
-	state.LastKnownLeaderID = req.GetKnownLeaderId()
 
 	return &pb.HeartbeatResponse{
 		Success: true,
@@ -234,6 +229,7 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 	}
 
 	var conditions []*pb.NetworkData
+	maxRange := 250.0
 
 	for id, state := range s.robots {
 		if id == reqRobotID {
@@ -243,65 +239,18 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 		distY := reqState.Info.Y - state.Info.Y
 		distance := math.Sqrt(distX*distX + distY*distY)
 
-		if distance <= communicationRange {
-			ratio := distance / communicationRange
+		if distance <= maxRange {
+			ratio := distance / maxRange
 			conditions = append(conditions, &pb.NetworkData{
 				TargetRobotId: id,
 				Bandwidth:     50.0 - (49.0 * ratio),
 				Latency:       5.0 + (245.0 * ratio),
-				Reliability:   1.0 - (0.0 * ratio), // TODO: add back some reliability degradation based on distance if desired
+				Reliability:   1.0 - (0.5 * ratio),
 			})
 		}
 	}
 
 	return &pb.NetworkResponse{NetworkConditions: conditions}, nil
-}
-
-func (s *server) resolveLeaderIDLocked() string {
-	leaderVotes := make(map[string]int)
-	for _, state := range s.robots {
-		if state.LastKnownLeaderID == "" {
-			continue
-		}
-		if _, exists := s.robots[state.LastKnownLeaderID]; !exists {
-			continue
-		}
-		leaderVotes[state.LastKnownLeaderID]++
-	}
-
-	winningLeaderID := ""
-	winningVoteCount := 0
-	for candidateID, voteCount := range leaderVotes {
-		if voteCount > winningVoteCount || (voteCount == winningVoteCount && (winningLeaderID == "" || candidateID < winningLeaderID)) {
-			winningLeaderID = candidateID
-			winningVoteCount = voteCount
-		}
-	}
-
-	return winningLeaderID
-}
-
-func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) []string {
-	sourceState, exists := s.robots[sourceID]
-	if !exists {
-		return nil
-	}
-
-	peers := make([]string, 0)
-	for _, candidateID := range sortedRobotIDs {
-		if candidateID == sourceID {
-			continue
-		}
-
-		candidateState := s.robots[candidateID]
-		distX := sourceState.Info.X - candidateState.Info.X
-		distY := sourceState.Info.Y - candidateState.Info.Y
-		if math.Sqrt(distX*distX+distY*distY) <= communicationRange {
-			peers = append(peers, candidateID)
-		}
-	}
-
-	return peers
 }
 
 // -------------------------------------------------------------------------
@@ -335,26 +284,9 @@ func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*p
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	leaderID := s.resolveLeaderIDLocked()
-
-	sortedRobotIDs := make([]string, 0, len(s.robots))
-	for id := range s.robots {
-		sortedRobotIDs = append(sortedRobotIDs, id)
-	}
-	sort.Strings(sortedRobotIDs)
-
-	rbts := make([]*pb.RobotInfo, 0, len(sortedRobotIDs))
-	for _, id := range sortedRobotIDs {
-		state := s.robots[id]
-		rbts = append(rbts, &pb.RobotInfo{
-			Id:                 state.Info.Id,
-			X:                  state.Info.X,
-			Y:                  state.Info.Y,
-			Heading:            state.Info.Heading,
-			IsLeader:           id == leaderID,
-			CommunicationRange: communicationRange,
-			InRangePeerIds:     s.inRangePeerIDsLocked(id, sortedRobotIDs),
-		})
+	var rbts []*pb.RobotInfo
+	for _, state := range s.robots {
+		rbts = append(rbts, state.Info)
 	}
 	return &pb.RobotDataResponse{Robots: rbts}, nil
 }

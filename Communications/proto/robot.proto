@@ -63,9 +63,6 @@ message HeartbeatRequest {
   double x = 2;
   double y = 3;
   double heading = 4;
-  // Leader ID this robot currently believes is authoritative.
-  // Empty when no leader is currently known.
-  string known_leader_id = 5;
 }
 
 message HeartbeatResponse {
@@ -79,7 +76,6 @@ message HeartbeatResponse {
 // PeerService is hosted by the robots to communicate heavily constrained data with neighbors
 service PeerService {
   rpc SyncData(PeerSyncRequest) returns (PeerSyncResponse);
-  rpc RouteMessage(RoutedMessageRequest) returns (RoutedMessageResponse);
 }
 
 // RaftService is hosted by robots for dedicated leader election and log replication traffic.
@@ -96,19 +92,6 @@ message PeerSyncRequest {
 
 message PeerSyncResponse {
   bool received = 1;
-}
-
-message RoutedMessageRequest {
-  string source_id = 1;       // Original sender
-  string destination_id = 2;  // Final target
-  string message_type = 3;    // "RequestVote", "VoteResponse", "AppendEntries", "AppendEntriesResponse"
-  bytes payload = 4;          // Serialized inner RPC message
-  int32 ttl = 5;              // Decremented each hop; dropped at 0
-}
-
-message RoutedMessageResponse {
-  bool delivered = 1;         // Whether the message reached its destination
-  bytes response_payload = 2; // Serialized response from destination (for request/response RPCs)
 }
 
 message VoteRequest {
