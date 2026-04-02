@@ -49,6 +49,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
+  gap: 1rem;
 }
 
 .header h1 {
@@ -58,6 +59,37 @@ body {
   background: linear-gradient(90deg, #fff, #aaa);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.pause-button {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pause-button.pause {
+  border-color: rgba(255, 196, 0, 0.5);
+  color: #ffd54f;
+}
+
+.pause-button.resume {
+  border-color: rgba(0, 255, 136, 0.6);
+  color: var(--accent);
+}
+
+.pause-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pause-button:not(:disabled):hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .status-indicators {
@@ -116,6 +148,16 @@ body {
   font-size: 1.8rem;
   font-weight: 600;
   color: var(--accent);
+}
+
+.stat-box .value.paused-state {
+  color: #ffd54f;
+}
+
+.control-error {
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  color: #ff9f9f;
 }
 
 .simulation-view {

@@ -40,7 +40,7 @@ Introduce a **decentralized distance-vector mesh routing layer** that enables mu
 
 4. **Raft uses mesh routing**: `syncRaftWithPeers` now iterates `routingTable.GetAllReachable()` (all multi-hop peers) instead of `activeNeighbours()` (1-hop only). Raft RPCs are serialized with `proto.Marshal`, sent via `meshRouter.SendMessage`, and deserialized on response. Direct gRPC dials to `:50053` are replaced entirely.
 
-5. **Adjusted timeouts**: Election timeout increased from 4-7s to 8-13s to account for multi-hop RTT.
+5. **Adjusted timeouts**: Election timeout increased from 4-7s to 10-17s to account for multi-hop RTT.
 
 6. **Dynamic quorum from reachable topology**: Raft quorum is not computed from a fixed swarm size. Each robot derives `totalNodes` from the peers it can currently route to, plus itself, and uses that value for vote majorities and log-commit majorities. This is necessary because the swarm is elastic, routing knowledge converges gradually through gossip, and partitions can hide parts of the cluster from a robot's local view.
 

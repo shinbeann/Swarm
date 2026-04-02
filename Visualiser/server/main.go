@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"net/http"
@@ -22,6 +23,11 @@ var (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true }, // Allow all origins for simplicity
+}
+
+type wsControlMessage struct {
+	Type  string `json:"type"`
+	Pause *bool  `json:"pause,omitempty"`
 }
 
 func main() {
@@ -74,10 +80,52 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 	ticker := time.NewTicker(33 * time.Millisecond) // 30 FPS update rate for example
 	defer ticker.Stop()
 
+	controlCh := make(chan wsControlMessage)
+	readErrCh := make(chan error, 1)
+
+	go func() {
+		for {
+			var msg wsControlMessage
+			if err := ws.ReadJSON(&msg); err != nil {
+				readErrCh <- err
+				return
+			}
+			controlCh <- msg
+		}
+	}()
+
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case err := <-readErrCh:
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) || errors.Is(err, websocket.ErrCloseSent) {
+				return
+			}
+			log.Printf("Websocket read error: %v", err)
+			return
+		case msg := <-controlCh:
+			if msg.Type != "set_pause" || msg.Pause == nil {
+				continue
+			}
+
+			pauseResp, err := client.SetSimulationPause(context.Background(), &pb.SimulationPauseRequest{Pause: *msg.Pause})
+			controlPayload := map[string]interface{}{
+				"type":      "set_pause",
+				"ok":        err == nil,
+				"is_paused": *msg.Pause,
+			}
+			if err != nil {
+				log.Printf("Error setting simulation pause: %v", err)
+				controlPayload["error"] = err.Error()
+			} else {
+				controlPayload["is_paused"] = pauseResp.GetIsPaused()
+			}
+
+			if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+				log.Printf("Error writing control ack to websocket: %v", err)
+				return
+			}
 		case <-ticker.C:
 			// Fetch environment data
 			envResp, err := client.GetEnvironmentData(context.Background(), &pb.EnvironmentRequest{})

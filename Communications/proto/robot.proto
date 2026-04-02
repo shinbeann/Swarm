@@ -56,6 +56,7 @@ message NetworkData {
 
 message NetworkResponse {
   repeated NetworkData network_conditions = 1;
+  bool simulation_paused = 2;
 }
 
 message HeartbeatRequest {

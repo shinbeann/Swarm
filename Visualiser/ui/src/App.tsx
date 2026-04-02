@@ -24,11 +24,20 @@ interface Environment {
     width: number;
     height: number;
     obstacles?: Obstacle[];
+    is_paused?: boolean;
+}
+
+interface ControlAck {
+    type?: string;
+    ok?: boolean;
+    is_paused?: boolean;
+    error?: string;
 }
 
 interface StatePayload {
     environment?: Environment;
     robots?: Robot[];
+    control?: ControlAck;
 }
 
 const LANDMARK_PREFIX = 'landmark:';
@@ -85,6 +94,7 @@ const colorForRobot = (robotID: string): number => {
 
 function App() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const wsRef = useRef<WebSocket | null>(null);
     const appRef = useRef<PIXI.Application | null>(null);
     const spritesRef = useRef<Map<string, PIXI.Graphics>>(new Map());
     const labelsRef = useRef<Map<string, PIXI.Text>>(new Map());
@@ -94,6 +104,9 @@ function App() {
     const [env, setEnv] = useState<Environment>({ width: 1000, height: 1000, obstacles: [] });
     const [robotCount, setRobotCount] = useState(0);
     const [connected, setConnected] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [pausePending, setPausePending] = useState(false);
+    const [pauseError, setPauseError] = useState<string | null>(null);
 
     // Initialize PixiJS
     useEffect(() => {
@@ -137,22 +150,37 @@ function App() {
         // For local UI dev via Vite, fallback to localhost:8080.
         const wsUrl = import.meta.env.DEV ? 'ws://localhost:8080/ws' : `ws://${window.location.host}/ws`;
         const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
         ws.onopen = () => {
             setConnected(true);
+            setPauseError(null);
             console.log('Connected to Visualiser Server');
         };
 
         ws.onclose = () => {
             setConnected(false);
+            setPausePending(false);
             console.log('Disconnected from server');
         };
 
         ws.onmessage = (event) => {
             try {
                 const data: StatePayload = JSON.parse(event.data);
+
+                if (data.control?.type === 'set_pause') {
+                    setPausePending(false);
+                    if (data.control.ok) {
+                        setIsPaused(Boolean(data.control.is_paused));
+                        setPauseError(null);
+                    } else {
+                        setPauseError(data.control.error ?? 'Failed to update pause state');
+                    }
+                }
+
                 if (data.environment) {
                     setEnv(data.environment);
+                    setIsPaused(Boolean(data.environment.is_paused));
                     if (appRef.current && envGraphicsRef.current) {
                         updateEnvironment(data.environment, envGraphicsRef.current);
                     }
@@ -163,12 +191,33 @@ function App() {
                     setRobotCount(data.robots.length);
                 }
             } catch (err) {
+                setPausePending(false);
                 console.error('Error parsing WebSocket message', err);
             }
         };
 
-        return () => ws.close();
+        return () => {
+            ws.close();
+            wsRef.current = null;
+        };
     }, []);
+
+    const togglePause = () => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || pausePending) return;
+
+        const nextPaused = !isPaused;
+        setPausePending(true);
+        setPauseError(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'set_pause', pause: nextPaused }));
+        } catch (error) {
+            setPausePending(false);
+            setPauseError('Failed to send pause command');
+            console.error('Error sending pause command', error);
+        }
+    };
 
     const updateEnvironment = (environment: Environment, graphics: PIXI.Graphics) => {
         graphics.clear();
@@ -350,6 +399,14 @@ function App() {
         <div className="dashboard-container">
             <header className="header glass">
                 <h1>Swarm Visualiser</h1>
+                <button
+                    type="button"
+                    className={`pause-button ${isPaused ? 'resume' : 'pause'}`}
+                    onClick={togglePause}
+                    disabled={!connected || pausePending}
+                >
+                    {pausePending ? 'Applying...' : isPaused ? 'Resume' : 'Pause'}
+                </button>
                 <div className="status-indicators">
                     <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`}></div>
                     <span>{connected ? 'Live' : 'Offline'}</span>
@@ -367,6 +424,11 @@ function App() {
                         <span className="label">Environment</span>
                         <span className="value">{env.width} x {env.height}</span>
                     </div>
+                    <div className="stat-box">
+                        <span className="label">Simulation</span>
+                        <span className={`value ${isPaused ? 'paused-state' : ''}`}>{isPaused ? 'Paused' : 'Running'}</span>
+                    </div>
+                    {pauseError && <div className="control-error">{pauseError}</div>}
                 </aside>
 
                 <section className="simulation-view glass">

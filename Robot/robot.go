@@ -28,11 +28,10 @@ const (
 
 const (
 	raftLeaderPingInterval = 10 * time.Second
-	raftElectionMinTimeout = 8 * time.Second // Increased for multi-hop mesh latency.
-	raftElectionJitter     = 5 * time.Second // Increased for multi-hop mesh latency.
-	raftSyncInterval       = 250 * time.Millisecond
-	gossipPayloadMb        = 1.0   // Simulated gossip sync payload size.
-	raftPayloadMb          = 0.001 // Small control-plane Raft RPC payload size approximation.
+	raftElectionMinTimeout = 10 * time.Second // Increased for multi-hop mesh latency.
+	raftElectionJitter     = 7 * time.Second  // Increased for multi-hop mesh latency.
+	raftSyncInterval       = 500 * time.Millisecond
+	raftCandidateVoteRetry = 2 * time.Second
 )
 
 type RaftLogEntry struct {
@@ -54,9 +53,9 @@ type Robot struct {
 	Client   pb.RobotServiceClient
 	Clock    *LamportClock
 	lastSync time.Time
+	paused   bool
 
 	store               *KnowledgeStore
-	neighbours          *NeighbourRegistry
 	networkMu           sync.RWMutex
 	networkConditions   map[RobotID]*pb.NetworkData
 	gossip              *GossipEngine
@@ -78,6 +77,7 @@ type Robot struct {
 	raftLog            []RaftLogEntry
 	commitIndex        int64
 	lastRaftPingSentAt time.Time
+	lastVoteRequestAt  time.Time
 	lastLeaderSeenAt   time.Time
 	lastElectionAt     time.Time
 	electionTimeout    time.Duration
@@ -98,7 +98,6 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 		Clock:               NewLamportClock(),
 		lastSync:            time.Now(),
 		store:               NewKnowledgeStore(),
-		neighbours:          NewNeighbourRegistry(3 * time.Second),
 		networkConditions:   make(map[RobotID]*pb.NetworkData),
 		discoveredLandmarks: make(map[LandmarkID]bool),
 		raftState:           raftFollower,
@@ -142,8 +141,14 @@ func (r *Robot) Run(ctx context.Context) {
 		case <-heartbeatTicker.C:
 			r.tick(ctx)
 		case <-moveTicker.C:
+			if r.isPaused() {
+				continue
+			}
 			r.requestMovement(ctx)
 		case <-raftTicker.C:
+			if r.isPaused() {
+				continue
+			}
 			r.tickRaft(ctx)
 		}
 	}
@@ -154,26 +159,34 @@ func (r *Robot) tick(ctx context.Context) {
 
 	r.mu.Lock()
 	knownLeaderID := r.knownLeaderID
+	currentX := r.X
+	currentY := r.Y
+	currentHeading := r.Heading
 	r.mu.Unlock()
 
 	// Heartbeat — WorldEngine returns the canonical position
 	heartbeatResp, err := r.Client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
 		RobotId:       r.ID,
-		X:             r.X,
-		Y:             r.Y,
-		Heading:       r.Heading,
+		X:             currentX,
+		Y:             currentY,
+		Heading:       currentHeading,
 		KnownLeaderId: knownLeaderID,
 	})
 	if err != nil {
 		log.Printf("worldheartbeat error: %v", err)
 	} else if heartbeatResp != nil && heartbeatResp.GetSuccess() {
 		// Sync local position mirror from the authoritative WorldEngine state
+		r.mu.Lock()
 		r.X = heartbeatResp.GetX()
 		r.Y = heartbeatResp.GetY()
 		r.Heading = heartbeatResp.GetHeading()
+		r.mu.Unlock()
 	}
 
 	r.refreshNetworkConditions(ctx)
+	if r.isPaused() {
+		return
+	}
 
 	// Sensor — detect nearby obstacles; result is used by requestMovement
 	sensorResp, err := r.Client.GetSensorData(ctx, &pb.SensorRequest{RobotId: r.ID})
@@ -181,23 +194,35 @@ func (r *Robot) tick(ctx context.Context) {
 		return
 	}
 
+	r.mu.Lock()
+	currentX = r.X
+	currentY = r.Y
 	r.nearObstacle = false
+	r.mu.Unlock()
+
 	for _, obj := range sensorResp.GetObjects() {
 		if obj.GetType() == "obstacle" {
-			distX := obj.GetX() - r.X
-			distY := obj.GetY() - r.Y
+			distX := obj.GetX() - currentX
+			distY := obj.GetY() - currentY
 			dist := math.Sqrt(distX*distX + distY*distY)
 			if dist <= 5.0 {
+				r.mu.Lock()
 				r.nearObstacle = true
 				r.obstacleAngle = math.Atan2(distY, distX)
+				r.mu.Unlock()
 				break
 			}
 		}
 
 		if strings.HasPrefix(obj.GetType(), "landmark:") {
 			id := LandmarkID(obj.GetId())
-			if !r.discoveredLandmarks[id] {
+			r.mu.Lock()
+			alreadyDiscovered := r.discoveredLandmarks[id]
+			if !alreadyDiscovered {
 				r.discoveredLandmarks[id] = true
+			}
+			r.mu.Unlock()
+			if !alreadyDiscovered {
 				ltype := LandmarkType(strings.TrimPrefix(obj.GetType(), "landmark:"))
 				r.gossip.RecordDiscovery(id, ltype, Location{X: obj.GetX(), Y: obj.GetY()})
 			}
@@ -209,6 +234,9 @@ func (r *Robot) refreshNetworkConditions(ctx context.Context) {
 	networkResp, err := r.Client.GetNetworkData(ctx, &pb.NetworkRequest{RobotId: r.ID})
 	if err != nil {
 		log.Printf("world network data error: %v", err)
+		r.networkMu.Lock()
+		r.networkConditions = make(map[RobotID]*pb.NetworkData)
+		r.networkMu.Unlock()
 		return
 	}
 
@@ -218,13 +246,20 @@ func (r *Robot) refreshNetworkConditions(ctx context.Context) {
 	for _, cond := range conditions {
 		targetID := RobotID(cond.GetTargetRobotId())
 		r.networkConditions[targetID] = cond
-		r.neighbours.RecordHeartbeat(targetID)
 	}
 	r.networkMu.Unlock()
+	r.setPaused(networkResp.GetSimulationPaused())
 }
 
 func (r *Robot) activeNeighbours() []RobotID {
-	return r.neighbours.GetActive()
+	r.networkMu.RLock()
+	defer r.networkMu.RUnlock()
+
+	active := make([]RobotID, 0, len(r.networkConditions))
+	for id := range r.networkConditions {
+		active = append(active, id)
+	}
+	return active
 }
 
 func (r *Robot) networkCondition(id RobotID) (*pb.NetworkData, bool) {
@@ -235,6 +270,9 @@ func (r *Robot) networkCondition(id RobotID) (*pb.NetworkData, bool) {
 }
 
 func (r *Robot) tickRaft(ctx context.Context) {
+	if r.isPaused() {
+		return
+	}
 	r.maybeStartElection()
 	r.syncRaftWithPeers(ctx)
 }
@@ -242,23 +280,34 @@ func (r *Robot) tickRaft(ctx context.Context) {
 // requestMovement picks a target position and asks the WorldEngine to move the robot there.
 // The WorldEngine has full authority over the actual path and final position.
 func (r *Robot) requestMovement(ctx context.Context) {
+	if r.isPaused() {
+		return
+	}
+
+	r.mu.Lock()
+	currentX := r.X
+	currentY := r.Y
+	nearObstacle := r.nearObstacle
+	obstacleAngle := r.obstacleAngle
+	r.mu.Unlock()
+
 	// Pick a random target 100–300 units away
 	distance := 100.0 + rand.Float64()*200.0
 	angle := rand.Float64() * 2 * math.Pi
 
-	if r.nearObstacle {
+	if nearObstacle {
 		// Aim away from the detected obstacle with a small random spread
-		angle = r.obstacleAngle + math.Pi + (rand.Float64()*0.5 - 0.25)
+		angle = obstacleAngle + math.Pi + (rand.Float64()*0.5 - 0.25)
 	}
 
-	targetX := r.X + math.Cos(angle)*distance
-	targetY := r.Y + math.Sin(angle)*distance
+	targetX := currentX + math.Cos(angle)*distance
+	targetY := currentY + math.Sin(angle)*distance
 
 	// Keep well clear of boundary walls
 	targetX = math.Max(50, math.Min(950, targetX))
 	targetY = math.Max(50, math.Min(950, targetY))
 
-	desiredHeading := math.Atan2(targetY-r.Y, targetX-r.X)
+	desiredHeading := math.Atan2(targetY-currentY, targetX-currentX)
 
 	_, err := r.Client.MoveToPosition(ctx, &pb.MoveRequest{
 		RobotId:        r.ID,
@@ -272,15 +321,23 @@ func (r *Robot) requestMovement(ctx context.Context) {
 }
 
 func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
+	if r.isPaused() {
+		return fmt.Errorf("robot paused")
+	}
+
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal gossip payload: %w", err)
 	}
 
-	if cond, ok := r.networkCondition(to); ok {
-		if !r.applyNetworkConstraints(string(to), cond.GetLatency(), cond.GetBandwidth(), cond.GetReliability(), gossipPayloadMb, "P2P") {
-			return fmt.Errorf("gossip packet dropped to %s", to)
-		}
+	cond, ok := r.networkCondition(to)
+	if !ok {
+		return fmt.Errorf("no current network condition for %s", to)
+	}
+
+	payloadMB := float64(len(payload)) / 1000000.0
+	if !r.applyNetworkConstraints(string(to), cond.GetLatency(), cond.GetBandwidth(), cond.GetReliability(), payloadMB, "P2P") {
+		return fmt.Errorf("gossip packet dropped to %s", to)
 	}
 
 	peerAddr := string(to) + ":50052"
@@ -309,8 +366,11 @@ func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
 }
 
 func (r *Robot) OnPeerSync(req *pb.PeerSyncRequest) {
+	if r.isPaused() {
+		return
+	}
+
 	r.Clock.Update(int(req.GetLamportClock()))
-	r.neighbours.RecordHeartbeat(RobotID(req.GetSenderId()))
 	log.Printf("[Gossip Recv] Robot %s received payload from %s", r.ID, req.GetSenderId())
 
 	var msg GossipMessage
@@ -335,7 +395,14 @@ func (r *Robot) OnPeerSync(req *pb.PeerSyncRequest) {
 }
 
 func (r *Robot) syncRaftWithPeers(ctx context.Context) {
-	// Still refresh direct-neighbour topology for peer tracking.
+	if r.isPaused() {
+		return
+	}
+
+	// Remove stale multi-hop routes before deriving Raft topology.
+	r.routingTable.PruneExpired(routeExpiryTimeout)
+
+	// Refresh direct-neighbour topology from current network conditions.
 	peerIDs := r.activeNeighbours()
 	for _, peerID := range peerIDs {
 		// Record direct neighbours in the routing table.
@@ -344,13 +411,21 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 	currentPeers := r.updateRaftPeerTopology()
 
 	r.mu.Lock()
+	now := time.Now()
 	state := r.raftState
 	if state == raftLeader {
-		r.maybeAppendLeaderPingLocked(time.Now())
+		r.maybeAppendLeaderPingLocked(now)
+	}
+	sendCandidateVotes := false
+	if state == raftCandidate {
+		sendCandidateVotes = r.shouldSendCandidateVotesLocked(now)
 	}
 	r.mu.Unlock()
 
 	if state == raftFollower {
+		return
+	}
+	if state == raftCandidate && !sendCandidateVotes {
 		return
 	}
 
@@ -371,6 +446,7 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 				if err != nil {
 					return
 				}
+				log.Printf("[Raft Send] %s -> %s RequestVote term=%d (mesh)", r.ID, tID, voteReq.GetTerm())
 				respBytes, err := r.meshRouter.SendMessage(RobotID(tID), "RequestVote", payload)
 				if err != nil {
 					return
@@ -379,7 +455,6 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 				if err := proto.Unmarshal(respBytes, &resp); err != nil {
 					return
 				}
-				log.Printf("[Raft Send] %s -> %s RequestVote term=%d (mesh)", r.ID, tID, voteReq.GetTerm())
 				r.handleVoteResponse(tID, &resp)
 
 			case raftLeader:
@@ -391,6 +466,11 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 				if err != nil {
 					return
 				}
+				if len(appendReq.GetEntries()) == 0 {
+					log.Printf("[Raft Send] %s -> %s heartbeat term=%d (mesh)", r.ID, tID, appendReq.GetTerm())
+				} else {
+					log.Printf("[Raft Send] %s -> %s append term=%d entries=%d (mesh)", r.ID, tID, appendReq.GetTerm(), len(appendReq.GetEntries()))
+				}
 				respBytes, err := r.meshRouter.SendMessage(RobotID(tID), "AppendEntries", payload)
 				if err != nil {
 					return
@@ -399,11 +479,7 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 				if err := proto.Unmarshal(respBytes, &resp); err != nil {
 					return
 				}
-				if len(appendReq.GetEntries()) == 0 {
-					log.Printf("[Raft Send] %s -> %s heartbeat term=%d (mesh)", r.ID, tID, appendReq.GetTerm())
-				} else {
-					log.Printf("[Raft Send] %s -> %s append term=%d entries=%d (mesh)", r.ID, tID, appendReq.GetTerm(), len(appendReq.GetEntries()))
-				}
+
 				r.handleAppendResponse(tID, appendReq, &resp)
 			}
 		}(targetID)
@@ -425,6 +501,10 @@ func (r *Robot) applyNetworkConstraints(targetID string, latencyMs, bandwidthMbp
 }
 
 func (r *Robot) maybeStartElection() {
+	if r.isPaused() {
+		return
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -446,6 +526,7 @@ func (r *Robot) maybeStartElection() {
 	r.knownLeaderID = ""
 	r.votedFor = r.ID
 	r.votesGranted = map[string]bool{r.ID: true}
+	r.lastVoteRequestAt = time.Time{}
 	r.lastElectionAt = now
 	r.electionTimeout = randomElectionTimeout()
 
@@ -523,6 +604,20 @@ func (r *Robot) maybeAppendLeaderPingLocked(now time.Time) {
 	r.matchIndex[r.ID] = entry.Index
 	r.lastRaftPingSentAt = now
 	r.lastLeaderSeenAt = now
+	log.Printf("[Raft] Leader %s appended entry for propagation: idx=%d term=%d", r.ID, entry.Index, entry.Term)
+}
+
+func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
+	if r.raftState != raftCandidate {
+		return false
+	}
+
+	if !r.lastVoteRequestAt.IsZero() && now.Sub(r.lastVoteRequestAt) < raftCandidateVoteRetry {
+		return false
+	}
+
+	r.lastVoteRequestAt = now
+	return true
 }
 
 func (r *Robot) buildAppendEntriesRequestForPeer(peerID string) *pb.AppendEntriesRequest {
@@ -627,6 +722,7 @@ func (r *Robot) becomeLeaderLocked() {
 	r.raftState = raftLeader
 	r.knownLeaderID = r.ID
 	r.votedFor = ""
+	r.lastVoteRequestAt = time.Time{}
 	r.lastLeaderSeenAt = time.Now()
 	r.lastRaftPingSentAt = time.Time{}
 
@@ -663,6 +759,9 @@ func (r *Robot) advanceCommitIndexLocked() {
 func (r *Robot) HandleRequestVote(req *pb.VoteRequest) *pb.VoteResponse {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.paused {
+		return &pb.VoteResponse{Term: r.raftTerm, VoteGranted: false}
+	}
 
 	log.Printf("[Raft Receive] %s <- %s RequestVote term=%d", r.ID, req.GetCandidateId(), req.GetTerm())
 
@@ -684,6 +783,9 @@ func (r *Robot) HandleRequestVote(req *pb.VoteRequest) *pb.VoteResponse {
 func (r *Robot) HandleAppendEntries(req *pb.AppendEntriesRequest) *pb.AppendEntriesResponse {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.paused {
+		return &pb.AppendEntriesResponse{Term: r.raftTerm, Success: false}
+	}
 
 	log.Printf("[Raft Receive] %s <- %s AppendEntries term=%d entries=%d", r.ID, req.GetLeaderId(), req.GetTerm(), len(req.GetEntries()))
 
@@ -749,6 +851,7 @@ func (r *Robot) becomeFollowerLocked(term int64, leaderID string) {
 	r.raftState = raftFollower
 	r.knownLeaderID = leaderID
 	r.votedFor = ""
+	r.lastVoteRequestAt = time.Time{}
 	r.votesGranted = make(map[string]bool)
 	r.lastLeaderSeenAt = time.Now()
 	r.electionTimeout = randomElectionTimeout()
@@ -797,4 +900,26 @@ func max64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func (r *Robot) isPaused() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.paused
+}
+
+func (r *Robot) setPaused(paused bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.paused == paused {
+		return
+	}
+
+	r.paused = paused
+	if paused {
+		log.Printf("[pause] Robot %s paused", r.ID)
+		return
+	}
+	log.Printf("[pause] Robot %s resumed", r.ID)
 }

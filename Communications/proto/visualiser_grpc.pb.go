@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	VisualiserService_GetEnvironmentData_FullMethodName = "/swarm.VisualiserService/GetEnvironmentData"
 	VisualiserService_GetRobotData_FullMethodName       = "/swarm.VisualiserService/GetRobotData"
+	VisualiserService_SetSimulationPause_FullMethodName = "/swarm.VisualiserService/SetSimulationPause"
 )
 
 // VisualiserServiceClient is the client API for VisualiserService service.
@@ -31,6 +32,8 @@ type VisualiserServiceClient interface {
 	GetEnvironmentData(ctx context.Context, in *EnvironmentRequest, opts ...grpc.CallOption) (*EnvironmentResponse, error)
 	// visualiser requests for robot data relevant to the visualiser from the world.
 	GetRobotData(ctx context.Context, in *RobotDataRequest, opts ...grpc.CallOption) (*RobotDataResponse, error)
+	// visualiser toggles simulation pause state across world and robots.
+	SetSimulationPause(ctx context.Context, in *SimulationPauseRequest, opts ...grpc.CallOption) (*SimulationPauseResponse, error)
 }
 
 type visualiserServiceClient struct {
@@ -61,6 +64,16 @@ func (c *visualiserServiceClient) GetRobotData(ctx context.Context, in *RobotDat
 	return out, nil
 }
 
+func (c *visualiserServiceClient) SetSimulationPause(ctx context.Context, in *SimulationPauseRequest, opts ...grpc.CallOption) (*SimulationPauseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SimulationPauseResponse)
+	err := c.cc.Invoke(ctx, VisualiserService_SetSimulationPause_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VisualiserServiceServer is the server API for VisualiserService service.
 // All implementations must embed UnimplementedVisualiserServiceServer
 // for forward compatibility.
@@ -69,6 +82,8 @@ type VisualiserServiceServer interface {
 	GetEnvironmentData(context.Context, *EnvironmentRequest) (*EnvironmentResponse, error)
 	// visualiser requests for robot data relevant to the visualiser from the world.
 	GetRobotData(context.Context, *RobotDataRequest) (*RobotDataResponse, error)
+	// visualiser toggles simulation pause state across world and robots.
+	SetSimulationPause(context.Context, *SimulationPauseRequest) (*SimulationPauseResponse, error)
 	mustEmbedUnimplementedVisualiserServiceServer()
 }
 
@@ -84,6 +99,9 @@ func (UnimplementedVisualiserServiceServer) GetEnvironmentData(context.Context, 
 }
 func (UnimplementedVisualiserServiceServer) GetRobotData(context.Context, *RobotDataRequest) (*RobotDataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRobotData not implemented")
+}
+func (UnimplementedVisualiserServiceServer) SetSimulationPause(context.Context, *SimulationPauseRequest) (*SimulationPauseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSimulationPause not implemented")
 }
 func (UnimplementedVisualiserServiceServer) mustEmbedUnimplementedVisualiserServiceServer() {}
 func (UnimplementedVisualiserServiceServer) testEmbeddedByValue()                           {}
@@ -142,6 +160,24 @@ func _VisualiserService_GetRobotData_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VisualiserService_SetSimulationPause_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SimulationPauseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VisualiserServiceServer).SetSimulationPause(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VisualiserService_SetSimulationPause_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VisualiserServiceServer).SetSimulationPause(ctx, req.(*SimulationPauseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VisualiserService_ServiceDesc is the grpc.ServiceDesc for VisualiserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -156,6 +192,10 @@ var VisualiserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRobotData",
 			Handler:    _VisualiserService_GetRobotData_Handler,
+		},
+		{
+			MethodName: "SetSimulationPause",
+			Handler:    _VisualiserService_SetSimulationPause_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

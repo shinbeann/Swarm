@@ -60,15 +60,25 @@ func (ge *GossipEngine) gossipLoop() {
 }
 
 func (ge *GossipEngine) gossipOnce() {
+	if ge.robot.isPaused() {
+		return
+	}
+
 	active := ge.robot.activeNeighbours()
-	if len(active) == 0 {
+	eligible := make([]RobotID, 0, len(active))
+	for _, peerID := range active {
+		if _, ok := ge.robot.networkCondition(peerID); ok {
+			eligible = append(eligible, peerID)
+		}
+	}
+	if len(eligible) == 0 {
 		return
 	}
 
 	// Prune expired routes before building the advertisement.
 	ge.robot.routingTable.PruneExpired(routeExpiryTimeout)
 
-	target := active[rand.Intn(len(active))]
+	target := eligible[rand.Intn(len(eligible))]
 	msg := &GossipMessage{
 		SenderID:  RobotID(ge.robot.ID),
 		Timestamp: ge.robot.Clock.Tick(),
@@ -82,6 +92,10 @@ func (ge *GossipEngine) gossipOnce() {
 }
 
 func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
+	if ge.robot.isPaused() {
+		return
+	}
+
 	ge.robot.Clock.Update(msg.Timestamp)
 	for _, entry := range msg.Entries {
 		ge.robot.store.Add(entry.ID, entry.Type, entry.Location, msg.SenderID, msg.Timestamp)
@@ -97,6 +111,10 @@ func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
 }
 
 func (ge *GossipEngine) RecordDiscovery(id LandmarkID, ltype LandmarkType, loc Location) {
+	if ge.robot.isPaused() {
+		return
+	}
+
 	timestamp := ge.robot.Clock.Tick()
 	ge.robot.store.Add(id, ltype, loc, RobotID(ge.robot.ID), timestamp)
 	log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)

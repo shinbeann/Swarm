@@ -8,6 +8,8 @@ service VisualiserService {
   rpc GetEnvironmentData(EnvironmentRequest) returns (EnvironmentResponse);
   // visualiser requests for robot data relevant to the visualiser from the world.
   rpc GetRobotData(RobotDataRequest) returns (RobotDataResponse);
+  // visualiser toggles simulation pause state across world and robots.
+  rpc SetSimulationPause(SimulationPauseRequest) returns (SimulationPauseResponse);
 }
 
 message EnvironmentRequest {}
@@ -16,6 +18,16 @@ message EnvironmentResponse {
   double width = 1;
   double height = 2;
   repeated Obstacle obstacles = 3;
+  bool is_paused = 4;
+}
+
+message SimulationPauseRequest {
+  bool pause = 1;
+}
+
+message SimulationPauseResponse {
+  bool success = 1;
+  bool is_paused = 2;
 }
 
 message Obstacle {

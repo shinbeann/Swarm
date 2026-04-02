@@ -406,6 +406,7 @@ func (x *NetworkData) GetReliability() float64 {
 type NetworkResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	NetworkConditions []*NetworkData         `protobuf:"bytes,1,rep,name=network_conditions,json=networkConditions,proto3" json:"network_conditions,omitempty"`
+	SimulationPaused  bool                   `protobuf:"varint,2,opt,name=simulation_paused,json=simulationPaused,proto3" json:"simulation_paused,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -445,6 +446,13 @@ func (x *NetworkResponse) GetNetworkConditions() []*NetworkData {
 		return x.NetworkConditions
 	}
 	return nil
+}
+
+func (x *NetworkResponse) GetSimulationPaused() bool {
+	if x != nil {
+		return x.SimulationPaused
+	}
+	return false
 }
 
 type HeartbeatRequest struct {
@@ -1178,9 +1186,10 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\x0ftarget_robot_id\x18\x01 \x01(\tR\rtargetRobotId\x12\x1c\n" +
 	"\tbandwidth\x18\x02 \x01(\x01R\tbandwidth\x12\x18\n" +
 	"\alatency\x18\x03 \x01(\x01R\alatency\x12 \n" +
-	"\vreliability\x18\x04 \x01(\x01R\vreliability\"T\n" +
+	"\vreliability\x18\x04 \x01(\x01R\vreliability\"\x81\x01\n" +
 	"\x0fNetworkResponse\x12A\n" +
-	"\x12network_conditions\x18\x01 \x03(\v2\x12.swarm.NetworkDataR\x11networkConditions\"\x8b\x01\n" +
+	"\x12network_conditions\x18\x01 \x03(\v2\x12.swarm.NetworkDataR\x11networkConditions\x12+\n" +
+	"\x11simulation_paused\x18\x02 \x01(\bR\x10simulationPaused\"\x8b\x01\n" +
 	"\x10HeartbeatRequest\x12\x19\n" +
 	"\brobot_id\x18\x01 \x01(\tR\arobotId\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +

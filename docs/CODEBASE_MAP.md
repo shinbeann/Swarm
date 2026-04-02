@@ -8,7 +8,7 @@ This document serves as the high-level overview of the `SwarmProject` directory 
 *   **`Robot/`**: Defines behavior, control loops, movement logic, constrained peer gossip (`PeerService`), decentralized mesh routing (`routing_table.go`, `mesh_router.go`), and constrained dedicated consensus traffic (`RaftService`) for each robot.
 *   **`WorldEngine/`**: Serves as the central server and source of truth for the simulation, providing faked sensor data and enforcing simulated network boundaries (bandwidth, latency, reliability) between robots.
 *   **`Visualiser/`**: A web-based visualizer featuring a React/PixiJS frontend in `/ui` and a Backend-for-Frontend (BFF) proxy connecting gRPC to WebSockets in `/server`.
-*   **`docs/`**: Contains the project's living knowledge base (`PROJECT_KNOWLEDGE.md`), architecture maps, and Architecture Decision Records (ADRs).
+*   **`docs/`**: Contains the project's living knowledge base (`PROJECT_SPECIFICATION.md`), architecture maps, test design notes, and Architecture Decision Records (ADRs).
 *   **`.agents/`**: Contains the system workflows, rules (`project-rules.md`), and skills utilized by the AI agent to maintain the project.
 
 ## Core Modules & Responsibilities
@@ -22,7 +22,7 @@ This document serves as the high-level overview of the `SwarmProject` directory 
 
 ## Testing Infrastructure
 
-*   **`Robot/raft_tests/`**: Contains documentation (`README.md`) on test design principles for the Raft consensus protocol.
+*   **`docs/TESTING.md`**: Documents test design principles and rationale for deterministic Raft/network tests.
 *   **`Robot/raft_*_test.go`, `Robot/network_test.go`**: Due to unexported method testing requirements (testing `package main` internal logic without exposing it), the Raft and Network test suite files live alongside `robot.go`. They manually drive the push-based state machine, bypass timing flakiness by manipulating internal clocks or injecting constrained network payloads, and verify election edge cases, routing convergence, split-brain scenarios, and leader failures without spinning up actual goroutines or gRPC servers.
 
 ## Internal Dependency Map (Go)
@@ -43,9 +43,10 @@ graph TD
 | :--- | :--- | :--- | :--- |
 | **Robot** | Heartbeat ticker | **30 ms (~33 Hz)** | Each tick: `SendHeartbeat` (reads canonical X/Y/Heading from response) → `GetSensorData` (stores nearest obstacle direction). Robot holds no local physics. |
 | **Robot** | Movement ticker | **Every 2 s** | `MoveToPosition` with absolute target `(X, Y)` + `desired_heading`. Target is chosen 100–300 units away; biased away from last sensed obstacle if one was within 5 units. |
-| **Robot** | P2P network sync | **Every 2 s** | `GetNetworkData` → goroutine per peer dispatching simulated `SyncData` (including `LamportClock`). |
-| **Robot** | Raft sync tick | **Every 250 ms** | Iterates all reachable peers from the routing table (including multi-hop). Serializes Raft RPCs, sends via `MeshRouter.SendMessage` through `PeerService.RouteMessage` with per-hop network constraints. |
-| **Robot** | Raft election timeout | **8 - 13 s** | Random jittered timeout (8s base + 5s jitter). Increased from 4-7s to accommodate multi-hop mesh latency. Converts Follower to Candidate if no valid Leader communication is received. |
+| **Robot** | Gossip / P2P sync loop | **Every 1 s** | Selects one random in-range neighbour, sends simulated constrained `SyncData` (including `LamportClock` and route advertisement) based on latest `GetNetworkData` conditions. |
+| **Robot** | Raft sync tick | **Every 500 ms** | Iterates all reachable peers from the routing table (including multi-hop). Serializes Raft RPCs, sends via `MeshRouter.SendMessage` through `PeerService.RouteMessage` with per-hop network constraints. |
+| **Robot** | Raft election timeout | **10 - 17 s** | Random jittered timeout (10s base + 7s jitter). Converts Follower to Candidate if no valid Leader communication is received. |
+| **Robot** | Candidate vote retry | **Every 2 s** | While in Candidate state, throttles `RequestVote` retransmission attempts to once every 2 seconds. |
 | **Robot** | Raft leader ping | **Every 10 s** | Leader appends a lightweight `leader_ping` log entry to maintain authority if no other outbound appends occur. |
 | **WorldEngine** | Physics simulation tick | **Every 30 ms** | Advances every robot with an active target by `50 units/sec × 0.03 s = 1.5 units`. Snaps to target on arrival; stops and clears target on wall contact. |
 | **WorldEngine** | Stale-robot cleanup | **Every 2 s** | Removes robots whose `LastSeen` exceeds **5 s** from the registry. |

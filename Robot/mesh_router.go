@@ -14,7 +14,6 @@ import (
 
 const (
 	defaultMeshTTL = 10
-	meshPayloadMb  = 0.002 // Approximate Raft RPC payload wrapped in RouteMessage.
 	meshRPCTimeout = 3 * time.Second
 )
 
@@ -33,6 +32,10 @@ func NewMeshRouter(robot *Robot) *MeshRouter {
 // and sends a RoutedMessageRequest to the next hop's PeerService.
 // Returns the response payload from the destination, or an error.
 func (mr *MeshRouter) SendMessage(dest RobotID, msgType string, payload []byte) ([]byte, error) {
+	if mr.robot.isPaused() {
+		return nil, fmt.Errorf("robot paused")
+	}
+
 	route, ok := mr.robot.routingTable.GetRoute(dest)
 	if !ok {
 		return nil, fmt.Errorf("no route to %s", dest)
@@ -46,12 +49,13 @@ func (mr *MeshRouter) SendMessage(dest RobotID, msgType string, payload []byte) 
 		return nil, fmt.Errorf("no network condition for next hop %s", nextHop)
 	}
 
+	payloadMb := float64(len(payload)) / 1000000.0
 	if !mr.robot.applyNetworkConstraints(
 		string(nextHop),
 		cond.GetLatency(),
 		cond.GetBandwidth(),
 		cond.GetReliability(),
-		meshPayloadMb,
+		payloadMb,
 		"Mesh",
 	) {
 		return nil, fmt.Errorf("mesh packet dropped on hop to %s", nextHop)
@@ -94,6 +98,10 @@ func (mr *MeshRouter) SendMessage(dest RobotID, msgType string, payload []byte) 
 // If this robot is the destination, it dispatches the inner RPC.
 // Otherwise, it decrements TTL and forwards to the next hop.
 func (mr *MeshRouter) HandleRouteMessage(ctx context.Context, req *pb.RoutedMessageRequest) *pb.RoutedMessageResponse {
+	if mr.robot.isPaused() {
+		return &pb.RoutedMessageResponse{Delivered: false}
+	}
+
 	destID := req.GetDestinationId()
 
 	// Are we the destination?
@@ -122,12 +130,13 @@ func (mr *MeshRouter) HandleRouteMessage(ctx context.Context, req *pb.RoutedMess
 	if !hasCond {
 		return &pb.RoutedMessageResponse{Delivered: false}
 	}
+	payloadMb := float64(len(req.GetPayload())) / 1000000.0
 	if !mr.robot.applyNetworkConstraints(
 		string(nextHop),
 		cond.GetLatency(),
 		cond.GetBandwidth(),
 		cond.GetReliability(),
-		meshPayloadMb,
+		payloadMb,
 		"Mesh",
 	) {
 		return &pb.RoutedMessageResponse{Delivered: false}

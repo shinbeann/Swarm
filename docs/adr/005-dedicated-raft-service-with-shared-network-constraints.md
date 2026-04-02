@@ -25,7 +25,7 @@ Network constraint simulation is shared across both traffic classes:
 
 - Reliability-based packet drop.
 - Latency + bandwidth delay before RPC dispatch.
-- Existing payload-size assumptions remain unchanged (`gossipPayloadMb = 1.0`, `raftPayloadMb = 0.001`).
+- Delay calculations are based on actual serialized payload size at send time.
 
 No HTTP status endpoint is included in this architecture.
 
@@ -50,9 +50,8 @@ Operational implications:
 
 The implemented Raft algorithm operates using a push-based model tied directly to the robot's main event loops. State transitions (Follower, Candidate, Leader) and data replication are governed by a specific set of timers to maintain consensus:
 
-1.  **Raft Sync Tick Interval (`250ms`)**: The primary cadence for Raft coordination. Every 250ms, the robot checks if its election timeout has expired (potentially starting a new election) and synchronizes with known peers (sending `RequestVote` if Candidate, or `AppendEntries` if Leader).
-2.  **Election Timeout (`4s - 7s`)**: Followers expect to hear from the Leader within this window. It is composed of a minimum timeout of 4 seconds plus a random jitter of up to 3 seconds. The jitter prevents split votes during elections. If the timeout expires without communication from a valid Leader, the Follower converts to a Candidate and requests votes.
+1.  **Raft Sync Tick Interval (`500ms`)**: The primary cadence for Raft coordination. Every 500ms, the robot checks if its election timeout has expired (potentially starting a new election) and synchronizes with known peers (sending `RequestVote` if Candidate, or `AppendEntries` if Leader).
+2.  **Election Timeout (`10s - 17s`)**: Followers expect to hear from the Leader within this window. It is composed of a minimum timeout of 10 seconds plus a random jitter of up to 7 seconds. If the timeout expires without communication from a valid Leader, the Follower converts to a Candidate and requests votes.
 3.  **Leader Ping Interval (`10s`)**: To maintain authority in absence of actual append payloads, the Leader automatically generates a lightweight `leader_ping` log entry to replicate to followers if 10 seconds elapse without any other outbound events. This ensures followers' election timers are consistently reset.
-4.  **Data Replication Constraints**: Both `RequestVote` and `AppendEntries` RPC calls are subject to the same simulated network restrictions (latency, packet drop based on reliability, and simulated bandwidth limits for a 1KB control plane payload) as the primary gossip engine.
-
-- Documentation must describe both services, the shared network-constraint model, and the detailed Raft interaction loops.
+4.  **Candidate Vote Retry (`2s`)**: While in Candidate state, outbound vote requests are retried at most once every 2 seconds.
+5.  **Data Replication Constraints**: Both `RequestVote` and `AppendEntries` RPC calls are subject to the same simulated network restrictions (latency, packet drop based on reliability, and simulated bandwidth limits based on actual serialized payload size) as the primary gossip engine.

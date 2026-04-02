@@ -62,6 +62,7 @@ type EnvironmentResponse struct {
 	Width         float64                `protobuf:"fixed64,1,opt,name=width,proto3" json:"width,omitempty"`
 	Height        float64                `protobuf:"fixed64,2,opt,name=height,proto3" json:"height,omitempty"`
 	Obstacles     []*Obstacle            `protobuf:"bytes,3,rep,name=obstacles,proto3" json:"obstacles,omitempty"`
+	IsPaused      bool                   `protobuf:"varint,4,opt,name=is_paused,json=isPaused,proto3" json:"is_paused,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,6 +118,109 @@ func (x *EnvironmentResponse) GetObstacles() []*Obstacle {
 	return nil
 }
 
+func (x *EnvironmentResponse) GetIsPaused() bool {
+	if x != nil {
+		return x.IsPaused
+	}
+	return false
+}
+
+type SimulationPauseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pause         bool                   `protobuf:"varint,1,opt,name=pause,proto3" json:"pause,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SimulationPauseRequest) Reset() {
+	*x = SimulationPauseRequest{}
+	mi := &file_proto_visualiser_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SimulationPauseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SimulationPauseRequest) ProtoMessage() {}
+
+func (x *SimulationPauseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SimulationPauseRequest.ProtoReflect.Descriptor instead.
+func (*SimulationPauseRequest) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SimulationPauseRequest) GetPause() bool {
+	if x != nil {
+		return x.Pause
+	}
+	return false
+}
+
+type SimulationPauseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	IsPaused      bool                   `protobuf:"varint,2,opt,name=is_paused,json=isPaused,proto3" json:"is_paused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SimulationPauseResponse) Reset() {
+	*x = SimulationPauseResponse{}
+	mi := &file_proto_visualiser_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SimulationPauseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SimulationPauseResponse) ProtoMessage() {}
+
+func (x *SimulationPauseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SimulationPauseResponse.ProtoReflect.Descriptor instead.
+func (*SimulationPauseResponse) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SimulationPauseResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SimulationPauseResponse) GetIsPaused() bool {
+	if x != nil {
+		return x.IsPaused
+	}
+	return false
+}
+
 type Obstacle struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -130,7 +234,7 @@ type Obstacle struct {
 
 func (x *Obstacle) Reset() {
 	*x = Obstacle{}
-	mi := &file_proto_visualiser_proto_msgTypes[2]
+	mi := &file_proto_visualiser_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -142,7 +246,7 @@ func (x *Obstacle) String() string {
 func (*Obstacle) ProtoMessage() {}
 
 func (x *Obstacle) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_visualiser_proto_msgTypes[2]
+	mi := &file_proto_visualiser_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -155,7 +259,7 @@ func (x *Obstacle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Obstacle.ProtoReflect.Descriptor instead.
 func (*Obstacle) Descriptor() ([]byte, []int) {
-	return file_proto_visualiser_proto_rawDescGZIP(), []int{2}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Obstacle) GetId() string {
@@ -201,7 +305,7 @@ type RobotDataRequest struct {
 
 func (x *RobotDataRequest) Reset() {
 	*x = RobotDataRequest{}
-	mi := &file_proto_visualiser_proto_msgTypes[3]
+	mi := &file_proto_visualiser_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -213,7 +317,7 @@ func (x *RobotDataRequest) String() string {
 func (*RobotDataRequest) ProtoMessage() {}
 
 func (x *RobotDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_visualiser_proto_msgTypes[3]
+	mi := &file_proto_visualiser_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -226,7 +330,7 @@ func (x *RobotDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RobotDataRequest.ProtoReflect.Descriptor instead.
 func (*RobotDataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_visualiser_proto_rawDescGZIP(), []int{3}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{5}
 }
 
 type RobotInfo struct {
@@ -244,7 +348,7 @@ type RobotInfo struct {
 
 func (x *RobotInfo) Reset() {
 	*x = RobotInfo{}
-	mi := &file_proto_visualiser_proto_msgTypes[4]
+	mi := &file_proto_visualiser_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -256,7 +360,7 @@ func (x *RobotInfo) String() string {
 func (*RobotInfo) ProtoMessage() {}
 
 func (x *RobotInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_visualiser_proto_msgTypes[4]
+	mi := &file_proto_visualiser_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -269,7 +373,7 @@ func (x *RobotInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RobotInfo.ProtoReflect.Descriptor instead.
 func (*RobotInfo) Descriptor() ([]byte, []int) {
-	return file_proto_visualiser_proto_rawDescGZIP(), []int{4}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RobotInfo) GetId() string {
@@ -330,7 +434,7 @@ type RobotDataResponse struct {
 
 func (x *RobotDataResponse) Reset() {
 	*x = RobotDataResponse{}
-	mi := &file_proto_visualiser_proto_msgTypes[5]
+	mi := &file_proto_visualiser_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -342,7 +446,7 @@ func (x *RobotDataResponse) String() string {
 func (*RobotDataResponse) ProtoMessage() {}
 
 func (x *RobotDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_visualiser_proto_msgTypes[5]
+	mi := &file_proto_visualiser_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -355,7 +459,7 @@ func (x *RobotDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RobotDataResponse.ProtoReflect.Descriptor instead.
 func (*RobotDataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_visualiser_proto_rawDescGZIP(), []int{5}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RobotDataResponse) GetRobots() []*RobotInfo {
@@ -370,11 +474,17 @@ var File_proto_visualiser_proto protoreflect.FileDescriptor
 const file_proto_visualiser_proto_rawDesc = "" +
 	"\n" +
 	"\x16proto/visualiser.proto\x12\x05swarm\"\x14\n" +
-	"\x12EnvironmentRequest\"r\n" +
+	"\x12EnvironmentRequest\"\x8f\x01\n" +
 	"\x13EnvironmentResponse\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\x01R\x05width\x12\x16\n" +
 	"\x06height\x18\x02 \x01(\x01R\x06height\x12-\n" +
-	"\tobstacles\x18\x03 \x03(\v2\x0f.swarm.ObstacleR\tobstacles\"d\n" +
+	"\tobstacles\x18\x03 \x03(\v2\x0f.swarm.ObstacleR\tobstacles\x12\x1b\n" +
+	"\tis_paused\x18\x04 \x01(\bR\bisPaused\".\n" +
+	"\x16SimulationPauseRequest\x12\x14\n" +
+	"\x05pause\x18\x01 \x01(\bR\x05pause\"P\n" +
+	"\x17SimulationPauseResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\tis_paused\x18\x02 \x01(\bR\bisPaused\"d\n" +
 	"\bObstacle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
@@ -391,10 +501,11 @@ const file_proto_visualiser_proto_rawDesc = "" +
 	"\x13communication_range\x18\x06 \x01(\x01R\x12communicationRange\x12)\n" +
 	"\x11in_range_peer_ids\x18\a \x03(\tR\x0einRangePeerIds\"=\n" +
 	"\x11RobotDataResponse\x12(\n" +
-	"\x06robots\x18\x01 \x03(\v2\x10.swarm.RobotInfoR\x06robots2\xa3\x01\n" +
+	"\x06robots\x18\x01 \x03(\v2\x10.swarm.RobotInfoR\x06robots2\xf8\x01\n" +
 	"\x11VisualiserService\x12K\n" +
 	"\x12GetEnvironmentData\x12\x19.swarm.EnvironmentRequest\x1a\x1a.swarm.EnvironmentResponse\x12A\n" +
-	"\fGetRobotData\x12\x17.swarm.RobotDataRequest\x1a\x18.swarm.RobotDataResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
+	"\fGetRobotData\x12\x17.swarm.RobotDataRequest\x1a\x18.swarm.RobotDataResponse\x12S\n" +
+	"\x12SetSimulationPause\x12\x1d.swarm.SimulationPauseRequest\x1a\x1e.swarm.SimulationPauseResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
 
 var (
 	file_proto_visualiser_proto_rawDescOnce sync.Once
@@ -408,24 +519,28 @@ func file_proto_visualiser_proto_rawDescGZIP() []byte {
 	return file_proto_visualiser_proto_rawDescData
 }
 
-var file_proto_visualiser_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_visualiser_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_proto_visualiser_proto_goTypes = []any{
-	(*EnvironmentRequest)(nil),  // 0: swarm.EnvironmentRequest
-	(*EnvironmentResponse)(nil), // 1: swarm.EnvironmentResponse
-	(*Obstacle)(nil),            // 2: swarm.Obstacle
-	(*RobotDataRequest)(nil),    // 3: swarm.RobotDataRequest
-	(*RobotInfo)(nil),           // 4: swarm.RobotInfo
-	(*RobotDataResponse)(nil),   // 5: swarm.RobotDataResponse
+	(*EnvironmentRequest)(nil),      // 0: swarm.EnvironmentRequest
+	(*EnvironmentResponse)(nil),     // 1: swarm.EnvironmentResponse
+	(*SimulationPauseRequest)(nil),  // 2: swarm.SimulationPauseRequest
+	(*SimulationPauseResponse)(nil), // 3: swarm.SimulationPauseResponse
+	(*Obstacle)(nil),                // 4: swarm.Obstacle
+	(*RobotDataRequest)(nil),        // 5: swarm.RobotDataRequest
+	(*RobotInfo)(nil),               // 6: swarm.RobotInfo
+	(*RobotDataResponse)(nil),       // 7: swarm.RobotDataResponse
 }
 var file_proto_visualiser_proto_depIdxs = []int32{
-	2, // 0: swarm.EnvironmentResponse.obstacles:type_name -> swarm.Obstacle
-	4, // 1: swarm.RobotDataResponse.robots:type_name -> swarm.RobotInfo
+	4, // 0: swarm.EnvironmentResponse.obstacles:type_name -> swarm.Obstacle
+	6, // 1: swarm.RobotDataResponse.robots:type_name -> swarm.RobotInfo
 	0, // 2: swarm.VisualiserService.GetEnvironmentData:input_type -> swarm.EnvironmentRequest
-	3, // 3: swarm.VisualiserService.GetRobotData:input_type -> swarm.RobotDataRequest
-	1, // 4: swarm.VisualiserService.GetEnvironmentData:output_type -> swarm.EnvironmentResponse
-	5, // 5: swarm.VisualiserService.GetRobotData:output_type -> swarm.RobotDataResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
+	5, // 3: swarm.VisualiserService.GetRobotData:input_type -> swarm.RobotDataRequest
+	2, // 4: swarm.VisualiserService.SetSimulationPause:input_type -> swarm.SimulationPauseRequest
+	1, // 5: swarm.VisualiserService.GetEnvironmentData:output_type -> swarm.EnvironmentResponse
+	7, // 6: swarm.VisualiserService.GetRobotData:output_type -> swarm.RobotDataResponse
+	3, // 7: swarm.VisualiserService.SetSimulationPause:output_type -> swarm.SimulationPauseResponse
+	5, // [5:8] is the sub-list for method output_type
+	2, // [2:5] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -442,7 +557,7 @@ func file_proto_visualiser_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_visualiser_proto_rawDesc), len(file_proto_visualiser_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
