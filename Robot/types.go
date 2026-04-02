@@ -30,4 +30,5 @@ type LandmarkEntry struct {
 	Location  Location
 	Reporters map[RobotID]int // robot ID -> Lamport timestamp
 	FirstSeen time.Time
+	Verified  bool // true once a casualty has been confirmed on-site
 }

@@ -242,7 +242,33 @@ func (r *Robot) tickRaft(ctx context.Context) {
 // requestMovement picks a target position and asks the WorldEngine to move the robot there.
 // The WorldEngine has full authority over the actual path and final position.
 func (r *Robot) requestMovement(ctx context.Context) {
-	// Pick a random target 100–300 units away
+	// Priority 1: move toward closest unverified casualty
+	unverified := r.store.UnverifiedCasualties(RobotID(r.ID))
+	if len(unverified) > 0 {
+		target := r.closestCasualty(unverified)
+		if target != nil {
+			desiredHeading := math.Atan2(
+				target.Location.Y-r.Y,
+				target.Location.X-r.X,
+			)
+			_, err := r.Client.MoveToPosition(ctx, &pb.MoveRequest{
+				RobotId:        r.ID,
+				TargetX:        target.Location.X,
+				TargetY:        target.Location.Y,
+				DesiredHeading: desiredHeading,
+			})
+			if err != nil {
+				log.Printf("[move] %s failed to move toward casualty %s: %v",
+					r.ID, target.ID, err)
+			} else {
+				log.Printf("[move] %s diverting to verify casualty %s at (%.1f,%.1f) reporters:%d",
+					r.ID, target.ID, target.Location.X, target.Location.Y, len(target.Reporters))
+			}
+			return // skip random movement this tick
+		}
+	}
+
+	// Priority 2+3: obstacle avoidance then random
 	distance := 100.0 + rand.Float64()*200.0
 	angle := rand.Float64() * 2 * math.Pi
 
@@ -267,8 +293,28 @@ func (r *Robot) requestMovement(ctx context.Context) {
 		DesiredHeading: desiredHeading,
 	})
 	if err != nil {
-		log.Printf("move request error: %v", err)
+		log.Printf("[move] %s random movement error: %v", r.ID, err)
 	}
+}
+
+// closestCasualty returns the entry from candidates that is nearest to this
+// robot's current position. Returns nil only if candidates is empty.
+func (r *Robot) closestCasualty(candidates []*LandmarkEntry) *LandmarkEntry {
+    if len(candidates) == 0 {
+        return nil
+    }
+    var closest *LandmarkEntry
+    minDist := math.MaxFloat64
+    for _, e := range candidates {
+        dx := e.Location.X - r.X
+        dy := e.Location.Y - r.Y
+        dist := math.Sqrt(dx*dx + dy*dy)
+        if dist < minDist {
+            minDist = dist
+            closest = e
+        }
+    }
+    return closest
 }
 
 func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
