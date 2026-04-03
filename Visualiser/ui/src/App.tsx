@@ -41,6 +41,7 @@ interface StatePayload {
 }
 
 const LANDMARK_PREFIX = 'landmark:';
+const SENSOR_RANGE = 100;
 
 const hslToHexColor = (h: number, s: number, l: number): number => {
     const sat = s / 100;
@@ -90,6 +91,27 @@ const colorForRobot = (robotID: string): number => {
 
     const hue = (hash >>> 0) % 360;
     return hslToHexColor(hue, 85, 56);
+};
+
+const drawDottedEllipse = (
+    graphics: PIXI.Graphics,
+    cx: number,
+    cy: number,
+    radiusX: number,
+    radiusY: number,
+    color: number,
+    alpha: number
+) => {
+    const circumference = Math.PI * (3 * (radiusX + radiusY) - Math.sqrt((3 * radiusX + radiusY) * (radiusX + 3 * radiusY)));
+    const dotCount = Math.max(24, Math.ceil(circumference / 14));
+    const dotRadius = Math.max(0.6, Math.min(radiusX, radiusY) * 0.012);
+
+    // graphics.fill({ color, alpha });
+    for (let i = 0; i < dotCount; i++) {
+        const angle = (i / dotCount) * Math.PI * 2;
+        graphics.circle(cx + Math.cos(angle) * radiusX, cy + Math.sin(angle) * radiusY, dotRadius);
+    }
+    graphics.fill({color, alpha});
 };
 
 function App() {
@@ -311,8 +333,20 @@ function App() {
             const radiusX = range * scaleX;
             const radiusY = range * scaleY;
 
-            graphics.ellipse(robot.x * scaleX, robot.y * scaleY, radiusX, radiusY);
-            graphics.stroke({ width: 2.2, color: colorForRobot(robot.id), alpha: 0.78 });
+            // graphics.ellipse(robot.x * scaleX, robot.y * scaleY, radiusX, radiusY);
+            // graphics.stroke({ width: 2.2, color: colorForRobot(robot.id), alpha: 0.78 });
+
+            const centerX = robot.x * scaleX;
+            const centerY = robot.y * scaleY;
+
+            const sensorRadiusX = SENSOR_RANGE * scaleX;
+            const sensorRadiusY = SENSOR_RANGE * scaleY;
+            graphics.ellipse(centerX, centerY, sensorRadiusX, sensorRadiusY);
+            graphics.stroke({ width: 2, color: colorForRobot(robot.id), alpha: 0.9 });
+
+            drawDottedEllipse(graphics, centerX, centerY, radiusX, radiusY, colorForRobot(robot.id), 0.78);
+
+
         });
     };
 

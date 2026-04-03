@@ -26,7 +26,8 @@ const (
 	robotSpeed         = 20.0
 	simTickMs          = 30
 	simDt              = float64(simTickMs) / 1000.0
-	discoveryRadius    = 10.0  // must be within this distance to detect a landmark
+	discoveryRadius    = 100.0  // must be within this distance to detect a landmark
+	landmarkSensorCooldown = 2 * time.Second
 	communicationRange = 250.0 // source of truth for physical wireless reachability
 )
 
@@ -71,7 +72,8 @@ type server struct {
 	walls  []*pb.Obstacle
 	paused bool
 
-	landmarks map[LandmarkID]*WorldLandmark
+	landmarks                 map[LandmarkID]*WorldLandmark
+	lastLandmarkSensorReport   map[string]map[LandmarkID]time.Time
 }
 
 // -------------------------------------------------------------------------
@@ -87,8 +89,9 @@ func newServer() *server {
 			{Id: "wall-left", X: -10, Y: 0, Width: 10, Height: 1000},
 			{Id: "wall-right", X: 1000, Y: 0, Width: 10, Height: 1000},
 		},
-		landmarks: make(map[LandmarkID]*WorldLandmark),
-		paused:    false,
+		landmarks:               make(map[LandmarkID]*WorldLandmark),
+		lastLandmarkSensorReport: make(map[string]map[LandmarkID]time.Time),
+		paused:                  false,
 	}
 	s.spawnLandmarks()
 	return s
@@ -101,12 +104,14 @@ func (s *server) spawnLandmarks() {
 		t    LandmarkType
 		x, y float64
 	}{
-		{"casualty-0", LandmarkCasualty, 200, 300},
+		{"casualty-0", LandmarkCasualty, 400, 300},
 		{"casualty-1", LandmarkCasualty, 700, 650},
 		{"casualty-2", LandmarkCasualty, 450, 800},
+		{"casualty-3", LandmarkCasualty, 200, 200},
+		{"casualty-4", LandmarkCasualty, 100, 250},
 		{"corridor-0", LandmarkCorridor, 500, 500},
 		{"corridor-1", LandmarkCorridor, 150, 750},
-		{"obstacle-0", LandmarkObstacle, 300, 200},
+		{"obstacle-0", LandmarkObstacle, 300, 500},
 		{"obstacle-1", LandmarkObstacle, 800, 400},
 	}
 
@@ -169,16 +174,16 @@ func (s *server) MoveToPosition(ctx context.Context, req *pb.MoveRequest) (*pb.M
 	state.TargetHeading = req.GetDesiredHeading()
 	state.HasTarget = true
 
-	log.Printf("Robot %s new target: (%.1f, %.1f) heading %.2frad",
-		req.GetRobotId(), state.TargetX, state.TargetY, state.TargetHeading)
+	// log.Printf("Robot %s new target: (%.1f, %.1f) heading %.2frad",
+	// 	req.GetRobotId(), state.TargetX, state.TargetY, state.TargetHeading)
 
 	return &pb.MoveResponse{Success: true}, nil
 }
 
 // GetSensorData — detects obstacles and landmarks within sensor range.
 func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.SensorResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	state, exists := s.robots[req.GetRobotId()]
 	if !exists {
@@ -186,7 +191,13 @@ func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.
 	}
 
 	var detected []*pb.ObjectData
-	sensorRange := 50.0
+	sensorRange := 50.0 // TODO: replace with discovery radius as well.
+	now := time.Now()
+	robotReports, ok := s.lastLandmarkSensorReport[req.GetRobotId()]
+	if !ok {
+		robotReports = make(map[LandmarkID]time.Time)
+		s.lastLandmarkSensorReport[req.GetRobotId()] = robotReports
+	}
 
 	// Detect obstacles (walls)
 	for _, w := range s.walls {
@@ -211,6 +222,11 @@ func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.
 		dist := math.Sqrt(distX*distX + distY*distY)
 
 		if dist <= discoveryRadius {
+			if lastSeen, seen := robotReports[id]; seen && now.Sub(lastSeen) < landmarkSensorCooldown {
+				continue
+			}
+			robotReports[id] = now
+			log.Printf("[world] Robot %s within sensor range of landmark %s at (%.1f, %.1f)", req.GetRobotId(), id, landmark.Location.X, landmark.Location.Y)
 			// Return landmark as ObjectData with type indicating landmark
 			detected = append(detected, &pb.ObjectData{
 				Id:   string(id),

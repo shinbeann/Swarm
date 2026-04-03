@@ -11,10 +11,10 @@ import (
 )
 
 type fakeRobotServiceClient struct {
-	moveRequests    []*pb.MoveRequest
-	heartbeatResp   *pb.HeartbeatResponse
-	networkResp     *pb.NetworkResponse
-	sensorResp      *pb.SensorResponse
+	moveRequests  []*pb.MoveRequest
+	heartbeatResp *pb.HeartbeatResponse
+	networkResp   *pb.NetworkResponse
+	sensorResp    *pb.SensorResponse
 }
 
 func (f *fakeRobotServiceClient) MoveToPosition(ctx context.Context, in *pb.MoveRequest, opts ...grpc.CallOption) (*pb.MoveResponse, error) {
@@ -185,6 +185,9 @@ func TestRobotTickRecordsFirstLandmarkSighting(t *testing.T) {
 	if entry.Type != LandmarkCasualty {
 		t.Fatalf("expected first sighting to preserve landmark type, got %s", entry.Type)
 	}
+	if entry.Location != (Location{X: 158, Y: 160}) {
+		t.Fatalf("expected stored landmark location to match sensor data, got (%.1f, %.1f)", entry.Location.X, entry.Location.Y)
+	}
 	if entry.Verified {
 		t.Fatalf("expected first sighting to stay unverified")
 	}
@@ -236,5 +239,39 @@ func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *te
 	secondMove := client.moveRequests[1]
 	if secondMove.TargetX == loc.X && secondMove.TargetY == loc.Y {
 		t.Fatalf("expected verified casualty not to be targeted again")
+	}
+}
+
+func TestGossipEngineCyclesThroughPeers(t *testing.T) {
+	robot := &Robot{
+		ID:                "scout",
+		Clock:             NewLamportClock(),
+		store:             NewKnowledgeStore(),
+		networkConditions: make(map[RobotID]*pb.NetworkData),
+		routingTable:      NewRoutingTable(RobotID("scout")),
+	}
+
+	robot.networkConditions[RobotID("peer-c")] = &pb.NetworkData{}
+	robot.networkConditions[RobotID("peer-a")] = &pb.NetworkData{}
+	robot.networkConditions[RobotID("peer-b")] = &pb.NetworkData{}
+
+	var targets []RobotID
+	engine := NewGossipEngine(robot, func(to RobotID, msg *GossipMessage) error {
+		targets = append(targets, to)
+		return nil
+	})
+
+	for i := 0; i < 6; i++ {
+		engine.gossipOnce()
+	}
+
+	expected := []RobotID{"peer-a", "peer-b", "peer-c", "peer-a", "peer-b", "peer-c"}
+	if len(targets) != len(expected) {
+		t.Fatalf("expected %d gossip sends, got %d", len(expected), len(targets))
+	}
+	for i, target := range expected {
+		if targets[i] != target {
+			t.Fatalf("expected gossip target %d to be %s, got %s", i, target, targets[i])
+		}
 	}
 }

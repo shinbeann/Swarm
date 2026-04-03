@@ -201,6 +201,8 @@ func (r *Robot) tick(ctx context.Context) {
 	r.mu.Unlock()
 
 	for _, obj := range sensorResp.GetObjects() {
+
+
 		if obj.GetType() == "obstacle" {
 			distX := obj.GetX() - currentX
 			distY := obj.GetY() - currentY
@@ -215,6 +217,8 @@ func (r *Robot) tick(ctx context.Context) {
 		}
 
 		if strings.HasPrefix(obj.GetType(), "landmark:") {
+			log.Printf("Near landmark %s of type %s at (%.1f, %.1f)", obj.GetId(), obj.GetType(), obj.GetX(), obj.GetY())
+
 			id := LandmarkID(obj.GetId())
 			r.mu.Lock()
 			alreadyDiscovered := r.discoveredLandmarks[id]
@@ -224,6 +228,7 @@ func (r *Robot) tick(ctx context.Context) {
 			r.mu.Unlock()
 			if !alreadyDiscovered {
 				ltype := LandmarkType(strings.TrimPrefix(obj.GetType(), "landmark:"))
+				log.Printf("Discovered landmark %s of type %s at (%.1f, %.1f)", id, ltype, obj.GetX(), obj.GetY())
 				r.gossip.RecordDiscovery(id, ltype, Location{X: obj.GetX(), Y: obj.GetY()})
 			}
 		}
