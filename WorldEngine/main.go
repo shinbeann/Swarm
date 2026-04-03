@@ -69,6 +69,7 @@ type server struct {
 	mu     sync.RWMutex
 	robots map[string]*RobotState
 	walls  []*pb.Obstacle
+	paused bool
 
 	landmarks map[LandmarkID]*WorldLandmark
 }
@@ -87,6 +88,7 @@ func newServer() *server {
 			{Id: "wall-right", X: 1000, Y: 0, Width: 10, Height: 1000},
 		},
 		landmarks: make(map[LandmarkID]*WorldLandmark),
+		paused:    false,
 	}
 	s.spawnLandmarks()
 	return s
@@ -229,7 +231,7 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 	reqRobotID := req.GetRobotId()
 	reqState, exists := s.robots[reqRobotID]
 	if !exists {
-		return &pb.NetworkResponse{NetworkConditions: []*pb.NetworkData{}}, nil
+		return &pb.NetworkResponse{NetworkConditions: []*pb.NetworkData{}, SimulationPaused: s.paused}, nil
 	}
 
 	var conditions []*pb.NetworkData
@@ -253,7 +255,7 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 		}
 	}
 
-	return &pb.NetworkResponse{NetworkConditions: conditions}, nil
+	return &pb.NetworkResponse{NetworkConditions: conditions, SimulationPaused: s.paused}, nil
 }
 
 func (s *server) resolveLeaderIDLocked() string {
@@ -308,6 +310,10 @@ func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) 
 // -------------------------------------------------------------------------
 
 func (s *server) GetEnvironmentData(ctx context.Context, req *pb.EnvironmentRequest) (*pb.EnvironmentResponse, error) {
+	s.mu.RLock()
+	paused := s.paused
+	s.mu.RUnlock()
+
 	obstacles := make([]*pb.Obstacle, 0, len(s.walls)+len(s.landmarks))
 	obstacles = append(obstacles, s.walls...)
 
@@ -327,6 +333,20 @@ func (s *server) GetEnvironmentData(ctx context.Context, req *pb.EnvironmentRequ
 		Width:     1000.0,
 		Height:    1000.0,
 		Obstacles: obstacles,
+		IsPaused:  paused,
+	}, nil
+}
+
+func (s *server) SetSimulationPause(ctx context.Context, req *pb.SimulationPauseRequest) (*pb.SimulationPauseResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.paused = req.GetPause()
+	log.Printf("[world] simulation pause set to %v", s.paused)
+
+	return &pb.SimulationPauseResponse{
+		Success:  true,
+		IsPaused: s.paused,
 	}, nil
 }
 
@@ -368,6 +388,10 @@ func (s *server) runSimTick() {
 	ticker := time.NewTicker(simTickMs * time.Millisecond)
 	for range ticker.C {
 		s.mu.Lock()
+		if s.paused {
+			s.mu.Unlock()
+			continue
+		}
 		for _, state := range s.robots {
 			if !state.HasTarget {
 				continue
