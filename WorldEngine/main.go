@@ -184,7 +184,7 @@ func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.
 	}
 
 	var detected []*pb.ObjectData
-	sensorRange := 10.0
+	sensorRange := 50.0
 
 	// Detect obstacles (walls)
 	for _, w := range s.walls {
