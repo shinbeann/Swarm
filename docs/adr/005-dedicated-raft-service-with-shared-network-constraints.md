@@ -4,7 +4,7 @@
 
 The project previously evolved two competing directions:
 
-- Keep the main branch gossip architecture (`PeerService`, gossip engine, neighbor registry, world-driven network discovery).
+- Keep the main branch gossip architecture (`PeerService`, gossip engine, world-driven network discovery, routing-table-driven neighbor reachability).
 - Introduce leader-feat branch consensus behavior (Raft election and replication).
 
 The merge decision requires preserving the main peer architecture while introducing Raft in a way that does not fork peer-discovery responsibilities or duplicate network-condition sourcing logic.
@@ -19,7 +19,7 @@ Robots run two inter-robot services:
 Raft peer targeting uses the same world-derived neighbor discovery path as gossip:
 
 - WorldEngine `GetNetworkData` is refreshed in the heartbeat-driven world tick.
-- Main neighbor tracking/active-neighbor logic remains the common source for which peers are considered reachable.
+- Active-neighbor selection is derived from current world link conditions and routing-table state (no separate neighbor registry).
 
 Network constraint simulation is shared across both traffic classes:
 

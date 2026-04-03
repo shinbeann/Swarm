@@ -25,7 +25,7 @@ var (
 const (
 	robotSpeed         = 20.0
 	simTickMs          = 30
-	simDt              = simTickMs / 1000.0
+	simDt              = float64(simTickMs) / 1000.0
 	discoveryRadius    = 10.0  // must be within this distance to detect a landmark
 	communicationRange = 250.0 // source of truth for physical wireless reachability
 )
@@ -93,7 +93,6 @@ func newServer() *server {
 }
 
 // spawnLandmarks places a fixed set of landmarks into the world at startup.
-// Swap the hardcoded positions for random generation if preferred.
 func (s *server) spawnLandmarks() {
 	fixed := []struct {
 		id   LandmarkID
@@ -185,7 +184,7 @@ func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.
 	}
 
 	var detected []*pb.ObjectData
-	sensorRange := 10.0
+	sensorRange := 50.0
 
 	// Detect obstacles (walls)
 	for _, w := range s.walls {
