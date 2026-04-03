@@ -2,7 +2,7 @@ package main
 
 import (
 	"log"
-	"math/rand"
+	"sort"
 	"sync"
 	"time"
 )
@@ -21,6 +21,9 @@ type SendFunc func(to RobotID, msg *GossipMessage) error
 type GossipEngine struct {
 	robot *Robot
 	send  SendFunc
+
+	mu            sync.Mutex
+	nextPeerIndex int
 
 	stopCh chan struct{}
 	wg     sync.WaitGroup
@@ -71,6 +74,9 @@ func (ge *GossipEngine) gossipOnce() {
 			eligible = append(eligible, peerID)
 		}
 	}
+	sort.Slice(eligible, func(i, j int) bool {
+		return eligible[i] < eligible[j]
+	})
 	if len(eligible) == 0 {
 		return
 	}
@@ -78,7 +84,7 @@ func (ge *GossipEngine) gossipOnce() {
 	// Prune expired routes before building the advertisement.
 	ge.robot.routingTable.PruneExpired(routeExpiryTimeout)
 
-	target := eligible[rand.Intn(len(eligible))]
+	target := ge.nextTargetPeer(eligible)
 	msg := &GossipMessage{
 		SenderID:  RobotID(ge.robot.ID),
 		Timestamp: ge.robot.Clock.Tick(),
@@ -89,6 +95,19 @@ func (ge *GossipEngine) gossipOnce() {
 	if err := ge.send(target, msg); err != nil {
 		log.Printf("[gossip engine] %s failed to send to %s: %v", ge.robot.ID, target, err)
 	}
+}
+
+func (ge *GossipEngine) nextTargetPeer(eligible []RobotID) RobotID {
+	ge.mu.Lock()
+	defer ge.mu.Unlock()
+
+	if len(eligible) == 0 {
+		return ""
+	}
+
+	target := eligible[ge.nextPeerIndex%len(eligible)]
+	ge.nextPeerIndex = (ge.nextPeerIndex + 1) % len(eligible)
+	return target
 }
 
 func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
@@ -117,5 +136,5 @@ func (ge *GossipEngine) RecordDiscovery(id LandmarkID, ltype LandmarkType, loc L
 
 	timestamp := ge.robot.Clock.Tick()
 	ge.robot.store.Add(id, ltype, loc, RobotID(ge.robot.ID), timestamp)
-	log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)
+	// log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)
 }
