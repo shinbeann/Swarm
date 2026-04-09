@@ -70,10 +70,13 @@ func (ge *GossipEngine) gossipOnce() {
 	active := ge.robot.activeNeighbours()
 	eligible := make([]RobotID, 0, len(active))
 	for _, peerID := range active {
+		// build eligibility list of active neighbours with known network conditions
 		if _, ok := ge.robot.networkCondition(peerID); ok {
 			eligible = append(eligible, peerID)
 		}
 	}
+	// Sort eligible peers to ensure deterministic gossip order across runs. Used with the nextPeerIndex to cycle through peers in a round-robin fashion.
+	//TODO: still unsure about this logic - active neighbours will change over time, so the eligible list might be different each gossip round. Is it possible that a peer gets "skipped" if it falls out of the eligible list at the wrong time?
 	sort.Slice(eligible, func(i, j int) bool {
 		return eligible[i] < eligible[j]
 	})
@@ -136,5 +139,5 @@ func (ge *GossipEngine) RecordDiscovery(id LandmarkID, ltype LandmarkType, loc L
 
 	timestamp := ge.robot.Clock.Tick()
 	ge.robot.store.Add(id, ltype, loc, RobotID(ge.robot.ID), timestamp)
-	// log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)
+	log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)
 }

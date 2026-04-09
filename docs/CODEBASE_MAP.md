@@ -43,7 +43,7 @@ graph TD
 | :--- | :--- | :--- | :--- |
 | **Robot** | Heartbeat ticker | **30 ms (~33 Hz)** | Each tick: `SendHeartbeat` (reads canonical X/Y/Heading from response) → `GetSensorData` (stores nearest obstacle direction). Robot holds no local physics. |
 | **Robot** | Movement ticker | **Every 2 s** | `MoveToPosition` with absolute target `(X, Y)` + `desired_heading`. Target is chosen 100–300 units away; biased away from last sensed obstacle if one was within 5 units. |
-| **Robot** | Gossip / P2P sync loop | **Every 1 s** | Selects one random in-range neighbour, sends simulated constrained `SyncData` (including `LamportClock` and route advertisement) based on latest `GetNetworkData` conditions. |
+| **Robot** | Gossip / P2P sync loop | **Every 1 s** | Selects one eligible in-range neighbour in deterministic round-robin order, sends simulated constrained `SyncData` (including `LamportClock` and route advertisement) based on latest `GetNetworkData` conditions. |
 | **Robot** | Raft sync tick | **Every 500 ms** | Iterates all reachable peers from the routing table (including multi-hop). Serializes Raft RPCs, sends via `MeshRouter.SendMessage` through `PeerService.RouteMessage` with per-hop network constraints. |
 | **Robot** | Raft election timeout | **10 - 17 s** | Random jittered timeout (10s base + 7s jitter). Converts Follower to Candidate if no valid Leader communication is received. |
 | **Robot** | Candidate vote retry | **Every 2 s** | While in Candidate state, throttles `RequestVote` retransmission attempts to once every 2 seconds. |

@@ -34,7 +34,7 @@ Introduce a **decentralized distance-vector mesh routing layer** that enables mu
 
 1. **Routing Table (`routing_table.go`)**: Each robot maintains a `RoutingTable` mapping every known peer to a `Route{NextHop, HopCount, LastUpdated}`. Routes expire after 10 seconds.
 
-2. **Route Discovery via Gossip**: The `GossipMessage` struct now includes a `Routes map[string]int` field. On each gossip tick, the robot advertises its routing table to a random 1-hop neighbour. On receive, a Bellman-Ford merge updates the local table: if sender reaches destination X in N hops, we can reach X via sender in N+1 hops.
+2. **Route Discovery via Gossip**: The `GossipMessage` struct now includes a `Routes map[string]int` field. On each gossip tick, the robot advertises its routing table to a deterministically selected 1-hop neighbour using sorted round-robin ordering. On receive, a Bellman-Ford merge updates the local table: if sender reaches destination X in N hops, we can reach X via sender in N+1 hops.
 
 3. **`RouteMessage` RPC**: A new RPC on `PeerService` wraps serialized Raft requests in a `RoutedMessageRequest{SourceId, DestinationId, MessageType, Payload, TTL}` envelope. Intermediate robots decrement TTL and forward to the next hop. The destination robot deserializes and dispatches the inner Raft RPC locally.
 

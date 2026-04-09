@@ -15,7 +15,7 @@ We treat gossip as a periodic anti-entropy exchange rather than an immediate rel
 
 ### What the gossip engine does
 
-1. Every second, the robot picks one active neighbour at random and sends a single gossip message to that peer.
+1. Every second, the robot selects one eligible active neighbour in a deterministic round-robin order and sends a single gossip message to that peer.
 2. Before sending, it prunes expired routes from the local routing table.
 3. The outgoing gossip message carries a full snapshot of the robot's current landmark knowledge plus a routing advertisement.
 4. When a landmark is first seen by the robot through the WorldEngine sensor feed, the robot records that discovery locally and includes it in future gossip payloads.
@@ -84,6 +84,7 @@ Trade-offs:
 1. Because the store keys only by `LandmarkID`, conflicting sensor reports for the same ID are not automatically resolved.
 2. If the WorldEngine ever emitted duplicate IDs for distinct objects, the store would merge them incorrectly.
 3. Since receive-time forwarding is absent, convergence depends on the periodic gossip loop rather than immediate propagation.
+4. Gossip selection is now deterministic, but the eligible peer set can still change between ticks; peers only re-enter the cycle when they become eligible again.
 
 ## Notes
 
