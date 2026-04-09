@@ -13,12 +13,21 @@ const (
 
 // KnowledgeStore stores discovered landmarks.
 type KnowledgeStore struct {
-	mu      sync.RWMutex
-	entries map[LandmarkID]*LandmarkEntry
+	mu         sync.RWMutex
+	entries    map[LandmarkID]*LandmarkEntry
+	verifiedCh chan<- *LandmarkEntry
 }
 
 func NewKnowledgeStore() *KnowledgeStore {
 	return &KnowledgeStore{entries: make(map[LandmarkID]*LandmarkEntry)}
+}
+
+// SetVerifiedCh wires up the one-way notification channel.
+// Call this once during Robot construction, before gossip starts.
+func (ks *KnowledgeStore) SetVerifiedCh(ch chan<- *LandmarkEntry) {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+	ks.verifiedCh = ch
 }
 
 func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, reporter RobotID, timestamp int) bool {
@@ -57,6 +66,12 @@ func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, r
     if !entry.Verified && len(entry.Reporters) >= VerificationQuorum {
         entry.Verified = true
         log.Printf("[KS] casualty %s VERIFIED — %d reporters reached quorum", id, len(entry.Reporters))
+        if ks.verifiedCh != nil {
+            select {
+            case ks.verifiedCh <- entry:
+            default:
+            }
+        }
         return true
     }
     return false

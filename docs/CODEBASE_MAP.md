@@ -41,7 +41,7 @@ graph TD
 
 | Component | Loop / Timer | Interval | Notes |
 | :--- | :--- | :--- | :--- |
-| **Robot** | Heartbeat ticker | **30 ms (~33 Hz)** | Each tick: `SendHeartbeat` (reads canonical X/Y/Heading from response) → `GetSensorData` (stores nearest obstacle direction). Robot holds no local physics. |
+| **Robot** | Heartbeat ticker | **30 ms (~33 Hz)** | Each tick: `SendHeartbeat` (reads canonical X/Y/Heading from response) → `GetSensorData` (stores nearest obstacle direction) and `GetNetworkData`. Robot holds no local physics. |
 | **Robot** | Movement ticker | **Every 2 s** | `MoveToPosition` with absolute target `(X, Y)` + `desired_heading`. Target is chosen 100–300 units away; biased away from last sensed obstacle if one was within 5 units. |
 | **Robot** | Gossip / P2P sync loop | **Every 1 s** | Selects one eligible in-range neighbour in deterministic round-robin order, sends simulated constrained `SyncData` (including `LamportClock` and route advertisement) based on latest `GetNetworkData` conditions. |
 | **Robot** | Raft sync tick | **Every 500 ms** | Iterates all reachable peers from the routing table (including multi-hop). Serializes Raft RPCs, sends via `MeshRouter.SendMessage` through `PeerService.RouteMessage` with per-hop network constraints. |
@@ -61,3 +61,5 @@ graph TD
 | [004](adr/004-peer-to-peer-network-simulation.md) | Peer-to-Peer Network Simulation | Robots host a `PeerService` gRPC server directly, while the World Engine acts as a network oracle supplying distance-based bandwidth, latency, and reliability metrics. |
 | [005](adr/005-dedicated-raft-service-with-shared-network-constraints.md) | Dedicated Raft Service with Shared Network Constraints | Robots keep main gossip architecture, add `RaftService` on a separate port, reuse world-derived peer discovery, and apply the same simulated constraints to gossip and raft traffic without a status endpoint. |
 | [006](adr/006-decentralized-mesh-routing.md) | Decentralized Mesh Routing | Distance-vector routing layer enabling multi-hop Raft communication across the entire swarm via `PeerService.RouteMessage`. |
+| [007](adr/007-gossip-landmark-state-and-knowledge-store.md) | Gossip-Driven Landmark State | Gossip protocol definition and rules for quorum verification. |
+| [008](adr/008-robot-functionality.md) | Robot Functionality | Movement decisions based on local knowledge state and Raft log integration for verified casualties. |

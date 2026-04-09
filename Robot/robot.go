@@ -61,6 +61,10 @@ type Robot struct {
 	gossip              *GossipEngine
 	discoveredLandmarks map[LandmarkID]bool
 
+	// casualtyVerifiedCh carries notifications from the KnowledgeStore to the Raft
+	// leader logic. Buffered so KS.Add() never blocks waiting for tickRaft.
+	casualtyVerifiedCh chan *LandmarkEntry
+
 	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true
 	nearObstacle  bool
 	obstacleAngle float64
@@ -91,8 +95,8 @@ type Robot struct {
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r := &Robot{
 		ID:                  id,
-		X:                   100 + rand.Float64()*50,
-		Y:                   100 + rand.Float64()*50,
+		X:                   100 + rand.Float64()*100,
+		Y:                   100 + rand.Float64()*100,
 		Heading:             rand.Float64() * 2 * math.Pi,
 		Client:              client,
 		Clock:               NewLamportClock(),
@@ -115,6 +119,11 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 
 	r.routingTable = NewRoutingTable(RobotID(id))
 	r.meshRouter = NewMeshRouter(r)
+
+	ch := make(chan *LandmarkEntry, 16)
+	r.casualtyVerifiedCh = ch
+	r.store.SetVerifiedCh(ch)
+
 	r.gossip = NewGossipEngine(r, r.sendGossipMessage)
 	r.gossip.Start()
 	return r
@@ -217,7 +226,7 @@ func (r *Robot) tick(ctx context.Context) {
 		}
 
 		if strings.HasPrefix(obj.GetType(), "landmark:") {
-			log.Printf("Near landmark %s of type %s at (%.1f, %.1f)", obj.GetId(), obj.GetType(), obj.GetX(), obj.GetY())
+			log.Printf("[Robot] Near landmark %s of type %s at (%.1f, %.1f)", obj.GetId(), obj.GetType(), obj.GetX(), obj.GetY())
 
 			id := LandmarkID(obj.GetId())
 			r.mu.Lock()
@@ -228,7 +237,7 @@ func (r *Robot) tick(ctx context.Context) {
 			r.mu.Unlock()
 			if !alreadyDiscovered {
 				ltype := LandmarkType(strings.TrimPrefix(obj.GetType(), "landmark:"))
-				log.Printf("Discovered landmark %s of type %s at (%.1f, %.1f)", id, ltype, obj.GetX(), obj.GetY())
+				log.Printf("[Robot]Discovered landmark %s of type %s at (%.1f, %.1f)", id, ltype, obj.GetX(), obj.GetY())
 				r.gossip.RecordDiscovery(id, ltype, Location{X: obj.GetX(), Y: obj.GetY()})
 			}
 		}
@@ -466,6 +475,7 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 	state := r.raftState
 	if state == raftLeader {
 		r.maybeAppendLeaderPingLocked(now)
+		r.appendVerifiedCasualtiesLocked(now)
 	}
 	sendCandidateVotes := false
 	if state == raftCandidate {
@@ -671,6 +681,46 @@ func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
 	return true
 }
 
+// appendVerifiedCasualtiesLocked checks the notification channel and appends a
+// casualty_verified log entry for each newly verified casualty.
+// Must be called with r.mu held.
+func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
+	if r.raftState != raftLeader {
+		// Drain the channel so it does not fill up on non-leader robots.
+		for {
+			select {
+			case <-r.casualtyVerifiedCh:
+			default:
+				return
+			}
+		}
+	}
+
+	for {
+		select {
+		case entry := <-r.casualtyVerifiedCh:
+			payload, err := json.Marshal(entry)
+			if err != nil {
+				log.Printf("[Raft] failed to marshal casualty_verified payload: %v", err)
+				continue
+			}
+			logEntry := RaftLogEntry{
+				Term:            r.raftTerm,
+				Index:           int64(len(r.raftLog)),
+				Type:            "casualty_verified",
+				Payload:         payload,
+				TimestampUnixMs: now.UnixMilli(),
+			}
+			r.raftLog = append(r.raftLog, logEntry)
+			r.matchIndex[r.ID] = logEntry.Index
+			log.Printf("[Raft] Leader %s appended casualty_verified for %s idx=%d term=%d",
+				r.ID, entry.ID, logEntry.Index, logEntry.Term)
+		default:
+			return
+		}
+	}
+}
+
 func (r *Robot) buildAppendEntriesRequestForPeer(peerID string) *pb.AppendEntriesRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -802,7 +852,7 @@ func (r *Robot) advanceCommitIndexLocked() {
 
 		if replicated > r.totalNodes/2 {
 			r.commitIndex = idx
-			log.Printf("[Raft] Leader %s committed idx=%d term=%d", r.ID, idx, r.raftTerm)
+			log.Printf("[Raft] Leader %s term=%d achieved quorum for log idx=%d, committing.", r.ID, r.raftTerm, idx)
 		}
 	}
 }
