@@ -95,8 +95,8 @@ type Robot struct {
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r := &Robot{
 		ID:                  id,
-		X:                   100 + rand.Float64()*100,
-		Y:                   100 + rand.Float64()*100,
+		X:                   100 + rand.Float64()*200,
+		Y:                   100 + rand.Float64()*200,
 		Heading:             rand.Float64() * 2 * math.Pi,
 		Client:              client,
 		Clock:               NewLamportClock(),
@@ -192,7 +192,7 @@ func (r *Robot) tick(ctx context.Context) {
 		r.mu.Unlock()
 	}
 
-	r.refreshNetworkConditions(ctx)
+	r.refreshNetworkConditions(ctx) // getting new local network data regarding one-hop peers from world engine
 	if r.isPaused() {
 		return
 	}
@@ -237,7 +237,7 @@ func (r *Robot) tick(ctx context.Context) {
 			r.mu.Unlock()
 			if !alreadyDiscovered {
 				ltype := LandmarkType(strings.TrimPrefix(obj.GetType(), "landmark:"))
-				log.Printf("[Robot]Discovered landmark %s of type %s at (%.1f, %.1f)", id, ltype, obj.GetX(), obj.GetY())
+				log.Printf("[Robot] Discovered landmark %s of type %s at (%.1f, %.1f)", id, ltype, obj.GetX(), obj.GetY())
 				r.gossip.RecordDiscovery(id, ltype, Location{X: obj.GetX(), Y: obj.GetY()})
 			}
 		}

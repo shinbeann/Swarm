@@ -133,7 +133,7 @@ func TestRobotOnPeerSyncVerifiesCasualtyOnThirdDistinctReporter(t *testing.T) {
 	id := LandmarkID("casualty-2")
 	loc := Location{X: 100, Y: 200}
 
-	r.OnPeerSync(gossipRequest("peer-1", 1, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc}))
+	r.OnPeerSync(gossipRequest("peer-1", 1, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1}}))
 	entry := findEntry(t, r.store, id)
 	if entry.Verified {
 		t.Fatalf("expected casualty to remain unverified after first peer report")
@@ -142,7 +142,7 @@ func TestRobotOnPeerSyncVerifiesCasualtyOnThirdDistinctReporter(t *testing.T) {
 		t.Fatalf("expected 1 reporter after first peer report, got %d", len(entry.Reporters))
 	}
 
-	r.OnPeerSync(gossipRequest("peer-2", 2, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc}))
+	r.OnPeerSync(gossipRequest("peer-2", 2, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-2"): 2}}))
 	entry = findEntry(t, r.store, id)
 	if entry.Verified {
 		t.Fatalf("expected casualty to remain unverified after second peer report")
@@ -151,13 +151,30 @@ func TestRobotOnPeerSyncVerifiesCasualtyOnThirdDistinctReporter(t *testing.T) {
 		t.Fatalf("expected 2 reporters after second peer report, got %d", len(entry.Reporters))
 	}
 
-	r.OnPeerSync(gossipRequest("peer-3", 3, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc}))
+	r.OnPeerSync(gossipRequest("peer-3", 3, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-3"): 3}}))
 	entry = findEntry(t, r.store, id)
 	if !entry.Verified {
 		t.Fatalf("expected casualty to verify after third distinct peer report")
 	}
 	if len(entry.Reporters) != 3 {
 		t.Fatalf("expected 3 reporters after third peer report, got %d", len(entry.Reporters))
+	}
+}
+
+func TestRobotOnPeerSyncPreservesEyewitnessProvenanceAcrossRelay(t *testing.T) {
+	r := newTestRobot(t, "receiver", &fakeRobotServiceClient{})
+	id := LandmarkID("casualty-relay")
+	loc := Location{X: 140, Y: 220}
+
+	r.OnPeerSync(gossipRequest("peer-1", 1, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1}}))
+	r.OnPeerSync(gossipRequest("peer-2", 2, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1}}))
+
+	entry := findEntry(t, r.store, id)
+	if _, ok := entry.Reporters[RobotID("peer-2")]; ok {
+		t.Fatalf("expected relay peer-2 not to be counted as an eyewitness reporter")
+	}
+	if len(entry.Reporters) != 1 {
+		t.Fatalf("expected relay to preserve only the original eyewitness reporter, got %d", len(entry.Reporters))
 	}
 }
 

@@ -48,7 +48,7 @@ When a robot receives peer state:
 3. The robot marks the sender as an active neighbour.
 4. The JSON payload is decoded into a `GossipMessage`.
 5. `OnReceive` updates the Lamport clock again using the message timestamp.
-6. Each landmark entry in the payload is merged into the knowledge store.
+6. Each incoming entry in the payload is merged into the knowledge store, preserving the embedded eyewitness `Reporters` map from the sender's local state.
 7. The sender is recorded as a direct 1-hop route.
 8. The sender's routing advertisement is merged into the routing table using distance-vector logic.
 
@@ -60,7 +60,7 @@ The knowledge store uses `LandmarkID` as the primary key.
 
 1. If an incoming report has an ID that is not already in the map, a new `LandmarkEntry` is created.
 2. If the ID already exists, the report is treated as evidence for the existing landmark.
-3. The store records the reporting robot in the entry's `Reporters` map if that robot has not reported the landmark before.
+3. The store merges the incoming entry's `Reporters` map into the local entry. The sender itself is not automatically counted as a reporter unless it actually appears in the embedded `Reporters` map.
 4. For casualty landmarks, once the number of distinct reporters reaches `VerificationQuorum` (3), the entry is marked `Verified`.
 
 Matching is therefore by ID only, not by coordinates, type, or fuzzy spatial comparison.
