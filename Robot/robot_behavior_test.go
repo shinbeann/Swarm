@@ -78,6 +78,7 @@ func gossipRequest(sender string, timestamp int, entries ...*LandmarkEntry) *pb.
 	}
 }
 
+// confirms that receiving peer gossip from 3 different reporters verifies the casualty on 3rd report
 func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	store := NewKnowledgeStore()
 	loc := Location{X: 12.5, Y: 42.25}
@@ -128,6 +129,7 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 }
 
+// checks that receiving peer gossip from 3 different reporters verifies the casualty on 3rd report
 func TestRobotOnPeerSyncVerifiesCasualtyOnThirdDistinctReporter(t *testing.T) {
 	r := newTestRobot(t, "receiver", &fakeRobotServiceClient{})
 	id := LandmarkID("casualty-2")
@@ -259,7 +261,7 @@ func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *te
 	}
 }
 
-func TestGossipEngineCyclesThroughPeers(t *testing.T) {
+func TestGossipEngineDeltaSkipsPeersWithoutNewEntries(t *testing.T) {
 	robot := &Robot{
 		ID:                "scout",
 		Clock:             NewLamportClock(),
@@ -268,27 +270,152 @@ func TestGossipEngineCyclesThroughPeers(t *testing.T) {
 		routingTable:      NewRoutingTable(RobotID("scout")),
 	}
 
-	robot.networkConditions[RobotID("peer-c")] = &pb.NetworkData{}
-	robot.networkConditions[RobotID("peer-a")] = &pb.NetworkData{}
-	robot.networkConditions[RobotID("peer-b")] = &pb.NetworkData{}
+	robot.networkConditions[RobotID("peer-a")] = &pb.NetworkData{Bandwidth: 10}
+	robot.networkConditions[RobotID("peer-b")] = &pb.NetworkData{Bandwidth: 10}
+	robot.networkConditions[RobotID("peer-c")] = &pb.NetworkData{Bandwidth: 10}
 
-	var targets []RobotID
+	type sent struct {
+		target RobotID
+		msg    *GossipMessage
+	}
+	var sentMsgs []sent
 	engine := NewGossipEngine(robot, func(to RobotID, msg *GossipMessage) error {
-		targets = append(targets, to)
+		sentMsgs = append(sentMsgs, sent{target: to, msg: msg})
 		return nil
 	})
 
-	for i := 0; i < 6; i++ {
-		engine.gossipOnce()
+	engine.RecordDiscovery("casualty-a", LandmarkCasualty, Location{X: 10, Y: 10})
+	engine.gossipOnce() // first delta should reach all peers
+
+	if len(sentMsgs) != 3 {
+		t.Fatalf("expected 3 sends on first gossip round, got %d", len(sentMsgs))
+	}
+	for _, out := range sentMsgs {
+		if len(out.msg.Entries) != 1 {
+			t.Fatalf("expected first gossip to send one entry, got %d", len(out.msg.Entries))
+		}
+		if out.msg.Entries[0].ID != "casualty-a" {
+			t.Fatalf("expected first gossip entry to be casualty-a, got %s", out.msg.Entries[0].ID)
+		}
 	}
 
-	expected := []RobotID{"peer-a", "peer-b", "peer-c", "peer-a", "peer-b", "peer-c"}
-	if len(targets) != len(expected) {
-		t.Fatalf("expected %d gossip sends, got %d", len(expected), len(targets))
+	engine.gossipOnce() // no new entries: should send nothing
+	if len(sentMsgs) != 3 {
+		t.Fatalf("expected no additional sends when there is no new delta, got %d total sends", len(sentMsgs))
 	}
-	for i, target := range expected {
-		if targets[i] != target {
-			t.Fatalf("expected gossip target %d to be %s, got %s", i, target, targets[i])
+
+	engine.RecordDiscovery("casualty-b", LandmarkCasualty, Location{X: 20, Y: 20})
+	engine.gossipOnce() // second delta should reach all peers
+
+	if len(sentMsgs) != 6 {
+		t.Fatalf("expected 6 total sends after second discovery, got %d", len(sentMsgs))
+	}
+
+	for _, out := range sentMsgs[3:] {
+		if len(out.msg.Entries) != 1 {
+			t.Fatalf("expected second gossip delta to contain one entry, got %d", len(out.msg.Entries))
 		}
+		if out.msg.Entries[0].ID != "casualty-b" {
+			t.Fatalf("expected second gossip entry to be casualty-b, got %s", out.msg.Entries[0].ID)
+		}
+	}
+}
+
+func TestGossipEngineDeltaPrioritizesCasualtiesWithinBandwidthCap(t *testing.T) {
+	robot := &Robot{
+		ID:                "scout",
+		Clock:             NewLamportClock(),
+		store:             NewKnowledgeStore(),
+		networkConditions: make(map[RobotID]*pb.NetworkData),
+		routingTable:      NewRoutingTable(RobotID("scout")),
+	}
+
+	robot.networkConditions[RobotID("peer-a")] = &pb.NetworkData{Bandwidth: 1}
+
+	var sentMsg *GossipMessage
+	engine := NewGossipEngine(robot, func(to RobotID, msg *GossipMessage) error {
+		sentMsg = msg
+		return nil
+	})
+
+	engine.RecordDiscovery("obstacle-a", LandmarkObstacle, Location{X: 4, Y: 4})
+	engine.RecordDiscovery("corridor-a", LandmarkCorridor, Location{X: 5, Y: 5})
+	engine.RecordDiscovery("casualty-a", LandmarkCasualty, Location{X: 6, Y: 6})
+	engine.gossipOnce()
+
+	if sentMsg == nil {
+		t.Fatalf("expected one gossip message to be sent")
+	}
+	if len(sentMsg.Entries) != 1 {
+		t.Fatalf("expected bandwidth cap of 1 entry, got %d", len(sentMsg.Entries))
+	}
+	if sentMsg.Entries[0].Type != LandmarkCasualty {
+		t.Fatalf("expected casualty to be prioritized under bandwidth cap, got %s", sentMsg.Entries[0].Type)
+	}
+	if sentMsg.Entries[0].ID != "casualty-a" {
+		t.Fatalf("expected prioritized casualty entry casualty-a, got %s", sentMsg.Entries[0].ID)
+	}
+
+	// With no new delta after watermark update, no further send should occur.
+	sentMsg = nil
+	engine.gossipOnce()
+	if sentMsg != nil {
+		t.Fatalf("expected no gossip send when there are no new entries for peer-a")
+	}
+}
+
+func TestGossipEngineOnReceiveMakesRobotIndependentDeltaSource(t *testing.T) {
+	robot := &Robot{
+		ID:                "robot-2",
+		Clock:             NewLamportClock(),
+		store:             NewKnowledgeStore(),
+		networkConditions: make(map[RobotID]*pb.NetworkData),
+		routingTable:      NewRoutingTable(RobotID("robot-2")),
+	}
+	robot.networkConditions[RobotID("robot-3")] = &pb.NetworkData{Bandwidth: 10}
+
+	var sentMsgs []*GossipMessage
+	engine := NewGossipEngine(robot, func(to RobotID, msg *GossipMessage) error {
+		if to != "robot-3" {
+			t.Fatalf("expected gossip target robot-3, got %s", to)
+		}
+		sentMsgs = append(sentMsgs, msg)
+		return nil
+	})
+
+	// Simulate robot-2 receiving a discovery from robot-1 and merging it locally.
+	engine.OnReceive(&GossipMessage{
+		SenderID:  "robot-1",
+		Timestamp: 14,
+		Entries: []*LandmarkEntry{
+			{
+				ID:       "casualty-a",
+				Type:     LandmarkCasualty,
+				Location: Location{X: 100, Y: 100},
+				Reporters: map[RobotID]int{
+					"robot-1": 14,
+				},
+			},
+		},
+	})
+
+	// Next gossip round after merge: robot-2 should propagate to robot-3.
+	engine.gossipOnce()
+
+	if len(sentMsgs) == 0 {
+		t.Fatalf("expected robot-2 to gossip merged entry to robot-3")
+	}
+	firstSend := sentMsgs[0]
+	if len(firstSend.Entries) != 1 {
+		t.Fatalf("expected one propagated entry, got %d", len(firstSend.Entries))
+	}
+	if firstSend.Entries[0].ID != "casualty-a" {
+		t.Fatalf("expected propagated entry casualty-a, got %s", firstSend.Entries[0].ID)
+	}
+
+	// Following round should skip because watermark has advanced.
+	engine.gossipOnce()
+	if len(sentMsgs) != 1 {
+		t.Fatalf("expected no second send without new entries, got %d sends", len(sentMsgs))
 	}
 }

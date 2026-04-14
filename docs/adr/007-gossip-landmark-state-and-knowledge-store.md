@@ -15,10 +15,14 @@ We treat gossip as a periodic anti-entropy exchange rather than an immediate rel
 
 ### What the gossip engine does
 
-1. Every second, the robot selects one eligible active neighbour in a deterministic round-robin order and sends a single gossip message to that peer.
+1. Every second, the robot selects up to three eligible active neighbours at random and considers each target independently.
 2. Before sending, it prunes expired routes from the local routing table.
-3. The outgoing gossip message carries a full snapshot of the robot's current landmark knowledge plus a routing advertisement.
-4. When a landmark is first seen by the robot through the WorldEngine sensor feed, the robot records that discovery locally and includes it in future gossip payloads.
+3. For each target peer, it computes a delta of only the entries newer than that peer's last successful sync watermark (`lastSyncTime[peer]`).
+4. The per-peer delta is sorted by priority: casualty entries first, then newer entries, then stable ID tie-break.
+5. The delta is capped by the link's advertised bandwidth (`NetworkData.bandwidth`) before send.
+6. The outgoing gossip message carries the selected delta plus a routing advertisement.
+7. The per-peer watermark is advanced only after a successful send.
+8. When a landmark is first seen by the robot through the WorldEngine sensor feed, the robot records that discovery locally and it becomes eligible for deltas to peers that have not yet synced past that timestamp.
 
 ### What the gossip engine does not do
 
@@ -27,6 +31,7 @@ We treat gossip as a periodic anti-entropy exchange rather than an immediate rel
 3. It does not generate landmark IDs itself.
 4. It does not reconcile conflicting landmark metadata by location or type.
 5. It does not delete or rewrite entries when a peer reports the same landmark again.
+6. It does not retransmit entries that have already been synced to a peer, as tracked by the per-peer lastSyncTime watermark.
 
 ### Gossip message content
 
@@ -34,7 +39,7 @@ The in-memory gossip payload is `GossipMessage`, which contains:
 
 1. `SenderID`: the sending robot ID.
 2. `Timestamp`: the sender's Lamport clock value at send time.
-3. `Entries`: the sender's full list of known landmark entries.
+3. `Entries`: a per-target delta subset of landmark entries (not always the full store snapshot).
 4. `Routes`: a routing advertisement of destination ID to hop count.
 
 On the wire, the robot wraps that JSON payload in `PeerSyncRequest`, which also includes `sender_id` and `lamport_clock`.
@@ -52,7 +57,7 @@ When a robot receives peer state:
 7. The sender is recorded as a direct 1-hop route.
 8. The sender's routing advertisement is merged into the routing table using distance-vector logic.
 
-This is a receive-and-merge path only. It is not a store-and-forward path.
+This is a receive-and-merge path only. It is not immediate message forwarding. Propagation still happens hop-by-hop because each robot periodically re-gossips its own merged store state as new deltas.
 
 ### How landmark matching works in the knowledge store
 
@@ -77,15 +82,18 @@ Benefits:
 
 1. Landmark state converges gradually across the swarm without requiring a central coordinator.
 2. Casualty verification becomes a local quorum problem rather than a global service.
-3. The behaviour is easy to reason about: periodic send, local merge, ID-based deduplication.
+3. Delta-only sends reduce repeated payload volume compared with full-snapshot gossip.
+4. Per-link bandwidth caps and casualty-first ordering prioritise high-value reports under constrained links.
+5. The behaviour remains easy to reason about: periodic send, local merge, ID-based deduplication.
 
 Trade-offs:
 
 1. Because the store keys only by `LandmarkID`, conflicting sensor reports for the same ID are not automatically resolved.
 2. If the WorldEngine ever emitted duplicate IDs for distinct objects, the store would merge them incorrectly.
-3. Since receive-time forwarding is absent, convergence depends on the periodic gossip loop rather than immediate propagation.
-4. Gossip selection is now deterministic, but the eligible peer set can still change between ticks; peers only re-enter the cycle when they become eligible again.
+3. Since receive-time forwarding is absent, convergence depends on periodic gossip rounds rather than immediate propagation.
+4. Random peer fanout can delay delivery to a specific peer compared with deterministic schedules, although repeated rounds still converge.
+5. Watermark-based deltas assume monotonic Lamport progress and can resend older semantic information if timestamp metadata changes.
 
 ## Notes
 
-This design fits the current codebase, but it reflects a minimal interpretation of distributed landmark sharing rather than a more aggressive epidemic protocol. If stronger consistency or conflict resolution is needed later, the store will need explicit merge rules beyond simple ID-based lookup.
+This design fits the current codebase and uses a practical middle ground between full-state anti-entropy and pure event-forwarding: periodic delta anti-entropy with local merge ownership. If stronger consistency or conflict resolution is needed later, the store will need explicit merge rules beyond simple ID-based lookup.

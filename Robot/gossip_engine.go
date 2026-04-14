@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"math"
+	"math/rand"
 	"sort"
 	"sync"
 	"time"
@@ -22,18 +24,23 @@ type GossipEngine struct {
 	robot *Robot
 	send  SendFunc
 
-	mu            sync.Mutex
-	nextPeerIndex int
+	mu           sync.Mutex
+	lastSyncTime map[RobotID]int
 
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 }
 
+const (
+	gossipFanout = 3
+)
+
 func NewGossipEngine(robot *Robot, send SendFunc) *GossipEngine {
 	return &GossipEngine{
-		robot:  robot,
-		send:   send,
-		stopCh: make(chan struct{}),
+		robot:        robot,
+		send:         send,
+		lastSyncTime: make(map[RobotID]int),
+		stopCh:       make(chan struct{}),
 	}
 }
 
@@ -75,42 +82,163 @@ func (ge *GossipEngine) gossipOnce() {
 			eligible = append(eligible, peerID)
 		}
 	}
-	// Sort eligible peers to ensure deterministic gossip order across runs. Used with the nextPeerIndex to cycle through peers in a round-robin fashion.
-	//TODO: still unsure about this logic - active neighbours will change over time, so the eligible list might be different each gossip round. Is it possible that a peer gets "skipped" if it falls out of the eligible list at the wrong time?
-	sort.Slice(eligible, func(i, j int) bool {
-		return eligible[i] < eligible[j]
-	})
 	if len(eligible) == 0 {
 		return
 	}
 
+	targets := randomFanoutPeers(eligible, gossipFanout)
+
 	// Prune expired routes before building the advertisement.
 	ge.robot.routingTable.PruneExpired(routeExpiryTimeout)
+	routes := ge.robot.routingTable.BuildAdvertisement()
 
-	target := ge.nextTargetPeer(eligible)
-	msg := &GossipMessage{
-		SenderID:  RobotID(ge.robot.ID),
-		Timestamp: ge.robot.Clock.Tick(),
-		Entries:   ge.robot.store.GetAll(),
-		Routes:    ge.robot.routingTable.BuildAdvertisement(),
-	}
+	for _, target := range targets {
+		cond, ok := ge.robot.networkCondition(target)
+		if !ok {
+			continue
+		}
 
-	if err := ge.send(target, msg); err != nil {
-		log.Printf("[gossip engine] %s failed to send to %s: %v", ge.robot.ID, target, err)
+		delta := ge.deltaForPeer(target, cond.GetBandwidth())
+		if len(delta) == 0 {
+			log.Printf("[gossip] %s skipping %s - no new entries since ts=%d",
+				ge.robot.ID, target, ge.peerSyncTime(target))
+			continue
+		}
+
+		sentAt := ge.robot.Clock.Tick()
+		msg := &GossipMessage{
+			SenderID:  RobotID(ge.robot.ID),
+			Timestamp: sentAt,
+			Entries:   delta,
+			Routes:    routes,
+		}
+		log.Printf("[gossip] %s -> %s delta=%d entries=%v",
+			ge.robot.ID, target, len(delta), entryIDs(delta))
+
+		if err := ge.send(target, msg); err != nil {
+			log.Printf("[gossip engine] %s failed to send to %s: %v", ge.robot.ID, target, err)
+			continue
+		}
+		ge.setPeerSyncTime(target, sentAt)
 	}
 }
 
-func (ge *GossipEngine) nextTargetPeer(eligible []RobotID) RobotID {
-	ge.mu.Lock()
-	defer ge.mu.Unlock()
-
-	if len(eligible) == 0 {
-		return ""
+func randomFanoutPeers(peers []RobotID, fanout int) []RobotID {
+	if len(peers) == 0 || fanout <= 0 {
+		return nil
 	}
 
-	target := eligible[ge.nextPeerIndex%len(eligible)]
-	ge.nextPeerIndex = (ge.nextPeerIndex + 1) % len(eligible)
-	return target
+	shuffled := append([]RobotID(nil), peers...)
+	rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+	if len(shuffled) > fanout {
+		shuffled = shuffled[:fanout]
+	}
+	return shuffled
+}
+
+func (ge *GossipEngine) deltaForPeer(peerID RobotID, bandwidth float64) []*LandmarkEntry {
+	lastSync := ge.peerSyncTime(peerID)
+	allEntries := ge.robot.store.GetAll()
+
+	delta := make([]*LandmarkEntry, 0, len(allEntries))
+	for _, entry := range allEntries {
+		if entryTimestamp(entry) > lastSync {
+			delta = append(delta, entry)
+		}
+	}
+	if len(delta) == 0 {
+		return nil
+	}
+
+	sort.Slice(delta, func(i, j int) bool {
+		left := delta[i]
+		right := delta[j]
+
+		leftCasualty := left.Type == LandmarkCasualty
+		rightCasualty := right.Type == LandmarkCasualty
+		if leftCasualty != rightCasualty {
+			return leftCasualty
+		}
+
+		leftTS := entryTimestamp(left)
+		rightTS := entryTimestamp(right)
+		if leftTS != rightTS {
+			return leftTS > rightTS
+		}
+
+		return left.ID < right.ID
+	})
+
+	totalCandidates := len(delta)
+	limit := bandwidthEntryCap(bandwidth)
+	sendCount := totalCandidates
+	dropped := []*LandmarkEntry{}
+	if len(delta) > limit {
+		dropped = append(dropped, delta[limit:]...)
+		delta = delta[:limit]
+		sendCount = limit
+	}
+	log.Printf("[gossip] delta for %s: total=%d cap=%d sending=%d",
+		peerID, totalCandidates, limit, len(delta))
+	for _, e := range delta[:sendCount] {
+		log.Printf("[gossip] included in delta: %s (type=%s priority=%d)",
+			e.ID, e.Type, entryPriority(e))
+	}
+	for _, e := range dropped {
+		log.Printf("[gossip] dropped from delta: %s (type=%s priority=%d)",
+			e.ID, e.Type, entryPriority(e))
+	}
+	return delta
+}
+
+func entryTimestamp(entry *LandmarkEntry) int {
+	maxTimestamp := 0
+	for _, ts := range entry.Reporters {
+		if ts > maxTimestamp {
+			maxTimestamp = ts
+		}
+	}
+	return maxTimestamp
+}
+
+func bandwidthEntryCap(bandwidth float64) int {
+	if bandwidth <= 0 {
+		return 1
+	}
+	limit := int(math.Floor(bandwidth))
+	if limit < 1 {
+		return 1
+	}
+	return limit
+}
+
+func entryIDs(entries []*LandmarkEntry) []LandmarkID {
+	ids := make([]LandmarkID, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.ID)
+	}
+	return ids
+}
+
+func entryPriority(entry *LandmarkEntry) int {
+	if entry != nil && entry.Type == LandmarkCasualty {
+		return 0
+	}
+	return 1
+}
+
+func (ge *GossipEngine) peerSyncTime(peerID RobotID) int {
+	ge.mu.Lock()
+	defer ge.mu.Unlock()
+	return ge.lastSyncTime[peerID]
+}
+
+func (ge *GossipEngine) setPeerSyncTime(peerID RobotID, timestamp int) {
+	ge.mu.Lock()
+	defer ge.mu.Unlock()
+	ge.lastSyncTime[peerID] = timestamp
 }
 
 func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
