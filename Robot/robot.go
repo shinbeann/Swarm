@@ -80,6 +80,7 @@ type Robot struct {
 	votedFor           string
 	raftLog            []RaftLogEntry
 	commitIndex        int64
+	lastAppliedIndex   int64
 	lastRaftPingSentAt time.Time
 	lastVoteRequestAt  time.Time
 	lastLeaderSeenAt   time.Time
@@ -109,6 +110,7 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 		lastLeaderSeenAt:    time.Now(),
 		raftLog:             make([]RaftLogEntry, 0),
 		commitIndex:         -1,
+		lastAppliedIndex:    -1,
 		electionTimeout:     randomElectionTimeout(),
 		votesGranted:        make(map[string]bool),
 		knownPeerIDs:        make(map[string]struct{}),
@@ -289,6 +291,10 @@ func (r *Robot) tickRaft(ctx context.Context) {
 	}
 	r.maybeStartElection()
 	r.syncRaftWithPeers(ctx)
+
+	r.mu.Lock()
+	r.applyCommittedEntriesLocked()
+	r.mu.Unlock()
 }
 
 // requestMovement picks a target position and asks the WorldEngine to move the robot there.
@@ -721,6 +727,31 @@ func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 	}
 }
 
+// applyCommittedEntriesLocked applies newly committed log entries exactly once.
+// Must be called with r.mu held.
+func (r *Robot) applyCommittedEntriesLocked() {
+	for idx := r.lastAppliedIndex + 1; idx <= r.commitIndex; idx++ {
+		if idx < 0 || idx >= int64(len(r.raftLog)) {
+			return
+		}
+
+		entry := r.raftLog[idx]
+		switch entry.Type {
+		case "casualty_verified":
+			var casualty LandmarkEntry
+			if err := json.Unmarshal(entry.Payload, &casualty); err != nil {
+				log.Printf("[Raft] failed to apply casualty_verified idx=%d: %v", idx, err)
+				break
+			}
+			r.store.ApplyCasualtyVerified(&casualty)
+			log.Printf("[Raft] %s applied committed casualty_verified idx=%d casualty=%s",
+				r.ID, idx, casualty.ID)
+		}
+
+		r.lastAppliedIndex = idx
+	}
+}
+
 func (r *Robot) buildAppendEntriesRequestForPeer(peerID string) *pb.AppendEntriesRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -941,6 +972,7 @@ func (r *Robot) HandleAppendEntries(req *pb.AppendEntriesRequest) *pb.AppendEntr
 	if req.GetLeaderCommit() > r.commitIndex {
 		r.commitIndex = min64(req.GetLeaderCommit(), int64(len(r.raftLog)-1))
 	}
+	r.applyCommittedEntriesLocked()
 
 	resp.Term = r.raftTerm
 	resp.Success = true

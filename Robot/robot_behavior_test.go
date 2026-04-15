@@ -109,15 +109,21 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 
 	if verified := store.Add(id, LandmarkCasualty, loc, "r3", 3); !verified {
-		t.Fatalf("expected third distinct report to verify the casualty")
+		t.Fatalf("expected third distinct report to signal quorum")
 	}
 
 	entry = findEntry(t, store, id)
-	if !entry.Verified {
-		t.Fatalf("expected casualty to be marked verified after third report")
+	if entry.Verified {
+		t.Fatalf("expected casualty to stay unverified until raft commit is applied")
 	}
 	if len(entry.Reporters) != 3 {
 		t.Fatalf("expected 3 reporters after third report, got %d", len(entry.Reporters))
+	}
+
+	store.ApplyCasualtyVerified(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("r1"): 1, RobotID("r2"): 2, RobotID("r3"): 3}})
+	entry = findEntry(t, store, id)
+	if !entry.Verified {
+		t.Fatalf("expected casualty to be marked verified after committed raft apply")
 	}
 
 	if verified := store.Add(id, LandmarkCasualty, loc, "r3", 4); verified {
@@ -129,8 +135,9 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 }
 
-// checks that receiving peer gossip from 3 different reporters verifies the casualty on 3rd report
-func TestRobotOnPeerSyncVerifiesCasualtyOnThirdDistinctReporter(t *testing.T) {
+// checks that receiving peer gossip from 3 different reporters only reaches quorum
+// and does not mark verified before raft commit apply.
+func TestRobotOnPeerSyncSignalsQuorumButStaysUnverified(t *testing.T) {
 	r := newTestRobot(t, "receiver", &fakeRobotServiceClient{})
 	id := LandmarkID("casualty-2")
 	loc := Location{X: 100, Y: 200}
@@ -155,11 +162,17 @@ func TestRobotOnPeerSyncVerifiesCasualtyOnThirdDistinctReporter(t *testing.T) {
 
 	r.OnPeerSync(gossipRequest("peer-3", 3, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-3"): 3}}))
 	entry = findEntry(t, r.store, id)
-	if !entry.Verified {
-		t.Fatalf("expected casualty to verify after third distinct peer report")
+	if entry.Verified {
+		t.Fatalf("expected casualty to remain unverified before raft commit apply")
 	}
 	if len(entry.Reporters) != 3 {
 		t.Fatalf("expected 3 reporters after third peer report, got %d", len(entry.Reporters))
+	}
+
+	r.store.ApplyCasualtyVerified(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1, RobotID("peer-2"): 2, RobotID("peer-3"): 3}})
+	entry = findEntry(t, r.store, id)
+	if !entry.Verified {
+		t.Fatalf("expected casualty to verify after raft commit apply")
 	}
 }
 
@@ -245,18 +258,32 @@ func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *te
 	}
 
 	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
-		t.Fatalf("expected third distinct report to verify the casualty")
+		t.Fatalf("expected third distinct report to signal quorum")
 	}
-	if len(r.store.UnverifiedCasualties(RobotID(r.ID))) != 0 {
-		t.Fatalf("expected verified casualty to disappear from unverified casualty list")
+	if len(r.store.UnverifiedCasualties(RobotID(r.ID))) != 1 {
+		t.Fatalf("expected casualty to stay in unverified list until raft commit apply")
 	}
 
 	r.requestMovement(context.Background())
 	if len(client.moveRequests) != 2 {
-		t.Fatalf("expected a second move request after verification, got %d", len(client.moveRequests))
+		t.Fatalf("expected a second move request while casualty is still unverified, got %d", len(client.moveRequests))
 	}
 	secondMove := client.moveRequests[1]
-	if secondMove.TargetX == loc.X && secondMove.TargetY == loc.Y {
+	if secondMove.TargetX != loc.X || secondMove.TargetY != loc.Y {
+		t.Fatalf("expected unverified casualty to remain movement target")
+	}
+
+	r.store.ApplyCasualtyVerified(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1, RobotID("peer-2"): 2, RobotID("peer-3"): 3}})
+	if len(r.store.UnverifiedCasualties(RobotID(r.ID))) != 0 {
+		t.Fatalf("expected casualty to disappear from unverified list after raft commit apply")
+	}
+
+	r.requestMovement(context.Background())
+	if len(client.moveRequests) != 3 {
+		t.Fatalf("expected a third move request after raft verification, got %d", len(client.moveRequests))
+	}
+	thirdMove := client.moveRequests[2]
+	if thirdMove.TargetX == loc.X && thirdMove.TargetY == loc.Y {
 		t.Fatalf("expected verified casualty not to be targeted again")
 	}
 }

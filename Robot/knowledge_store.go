@@ -1,10 +1,10 @@
 package main
 
 import (
-    "fmt"
-    "log"
-    "sync"
-    "time"
+	"fmt"
+	"log"
+	"sync"
+	"time"
 )
 
 const (
@@ -16,10 +16,14 @@ type KnowledgeStore struct {
 	mu         sync.RWMutex
 	entries    map[LandmarkID]*LandmarkEntry
 	verifiedCh chan<- *LandmarkEntry
+    quorumSeen map[LandmarkID]bool
 }
 
 func NewKnowledgeStore() *KnowledgeStore {
-	return &KnowledgeStore{entries: make(map[LandmarkID]*LandmarkEntry)}
+    return &KnowledgeStore{
+        entries:    make(map[LandmarkID]*LandmarkEntry),
+        quorumSeen: make(map[LandmarkID]bool),
+    }
 }
 
 func cloneLandmarkEntry(entry *LandmarkEntry) *LandmarkEntry {
@@ -56,7 +60,7 @@ func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, r
             id, loc.X, loc.Y, reporter, timestamp)
     }
 
-    return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp})
+    return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp}, true)
 }
 
 func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
@@ -68,7 +72,26 @@ func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
     defer ks.mu.Unlock()
 
     entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
-    return ks.mergeReportersLocked(entry, snapshot.Reporters)
+    return ks.mergeReportersLocked(entry, snapshot.Reporters, true)
+}
+
+// ApplyCasualtyVerified marks a casualty as verified only after a committed
+// Raft log entry is applied.
+func (ks *KnowledgeStore) ApplyCasualtyVerified(snapshot *LandmarkEntry) {
+    if snapshot == nil {
+        return
+    }
+
+    ks.mu.Lock()
+    defer ks.mu.Unlock()
+
+    entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
+    ks.mergeReportersLocked(entry, snapshot.Reporters, false)
+    if !entry.Verified {
+        entry.Verified = true
+        log.Printf("[KS] casualty %s VERIFIED via committed raft log", entry.ID)
+    }
+    ks.quorumSeen[entry.ID] = true
 }
 
 func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
@@ -103,7 +126,7 @@ func (ks *KnowledgeStore) ensureEntryLocked(id LandmarkID, ltype LandmarkType, l
     return entry, true
 }
 
-func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters map[RobotID]int) bool {
+func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters map[RobotID]int, notifyQuorum bool) bool {
     if entry.Reporters == nil {
         entry.Reporters = make(map[RobotID]int)
     }
@@ -120,12 +143,13 @@ func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters m
         }
     }
 
-    if !entry.Verified && len(entry.Reporters) >= VerificationQuorum {
-        entry.Verified = true
-        log.Printf("[KS] casualty %s VERIFIED — %d reporters reached quorum", entry.ID, len(entry.Reporters))
-        if ks.verifiedCh != nil {
+    if entry.Type == LandmarkCasualty && !ks.quorumSeen[entry.ID] && len(entry.Reporters) >= VerificationQuorum {
+        ks.quorumSeen[entry.ID] = true
+        log.Printf("[KS] casualty %s reached quorum (%d reporters); awaiting raft commit",
+            entry.ID, len(entry.Reporters))
+        if notifyQuorum && ks.verifiedCh != nil {
             select {
-            case ks.verifiedCh <- entry:
+            case ks.verifiedCh <- cloneLandmarkEntry(entry):
             default:
             }
         }
@@ -144,6 +168,7 @@ func (ks *KnowledgeStore) Remove(id LandmarkID) {
             id, e.Type, e.Verified, len(e.Reporters))
     }
     delete(ks.entries, id)
+    delete(ks.quorumSeen, id)
 }
 
 // UnverifiedCasualties returns casualty entries not yet reported by reporterID.
