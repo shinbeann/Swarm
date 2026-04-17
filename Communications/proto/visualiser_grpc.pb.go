@@ -22,6 +22,7 @@ const (
 	VisualiserService_GetEnvironmentData_FullMethodName = "/swarm.VisualiserService/GetEnvironmentData"
 	VisualiserService_GetRobotData_FullMethodName       = "/swarm.VisualiserService/GetRobotData"
 	VisualiserService_SetSimulationPause_FullMethodName = "/swarm.VisualiserService/SetSimulationPause"
+	VisualiserService_GetLeaderLog_FullMethodName       = "/swarm.VisualiserService/GetLeaderLog"
 )
 
 // VisualiserServiceClient is the client API for VisualiserService service.
@@ -34,6 +35,8 @@ type VisualiserServiceClient interface {
 	GetRobotData(ctx context.Context, in *RobotDataRequest, opts ...grpc.CallOption) (*RobotDataResponse, error)
 	// visualiser toggles simulation pause state across world and robots.
 	SetSimulationPause(ctx context.Context, in *SimulationPauseRequest, opts ...grpc.CallOption) (*SimulationPauseResponse, error)
+	// visualiser requests the latest leader raft log snapshot.
+	GetLeaderLog(ctx context.Context, in *LeaderLogRequest, opts ...grpc.CallOption) (*LeaderLogResponse, error)
 }
 
 type visualiserServiceClient struct {
@@ -74,6 +77,16 @@ func (c *visualiserServiceClient) SetSimulationPause(ctx context.Context, in *Si
 	return out, nil
 }
 
+func (c *visualiserServiceClient) GetLeaderLog(ctx context.Context, in *LeaderLogRequest, opts ...grpc.CallOption) (*LeaderLogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaderLogResponse)
+	err := c.cc.Invoke(ctx, VisualiserService_GetLeaderLog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VisualiserServiceServer is the server API for VisualiserService service.
 // All implementations must embed UnimplementedVisualiserServiceServer
 // for forward compatibility.
@@ -84,6 +97,8 @@ type VisualiserServiceServer interface {
 	GetRobotData(context.Context, *RobotDataRequest) (*RobotDataResponse, error)
 	// visualiser toggles simulation pause state across world and robots.
 	SetSimulationPause(context.Context, *SimulationPauseRequest) (*SimulationPauseResponse, error)
+	// visualiser requests the latest leader raft log snapshot.
+	GetLeaderLog(context.Context, *LeaderLogRequest) (*LeaderLogResponse, error)
 	mustEmbedUnimplementedVisualiserServiceServer()
 }
 
@@ -102,6 +117,9 @@ func (UnimplementedVisualiserServiceServer) GetRobotData(context.Context, *Robot
 }
 func (UnimplementedVisualiserServiceServer) SetSimulationPause(context.Context, *SimulationPauseRequest) (*SimulationPauseResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetSimulationPause not implemented")
+}
+func (UnimplementedVisualiserServiceServer) GetLeaderLog(context.Context, *LeaderLogRequest) (*LeaderLogResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLeaderLog not implemented")
 }
 func (UnimplementedVisualiserServiceServer) mustEmbedUnimplementedVisualiserServiceServer() {}
 func (UnimplementedVisualiserServiceServer) testEmbeddedByValue()                           {}
@@ -178,6 +196,24 @@ func _VisualiserService_SetSimulationPause_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VisualiserService_GetLeaderLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaderLogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VisualiserServiceServer).GetLeaderLog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VisualiserService_GetLeaderLog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VisualiserServiceServer).GetLeaderLog(ctx, req.(*LeaderLogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VisualiserService_ServiceDesc is the grpc.ServiceDesc for VisualiserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -196,6 +232,10 @@ var VisualiserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetSimulationPause",
 			Handler:    _VisualiserService_SetSimulationPause_Handler,
+		},
+		{
+			MethodName: "GetLeaderLog",
+			Handler:    _VisualiserService_GetLeaderLog_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

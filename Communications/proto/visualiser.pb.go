@@ -21,6 +21,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type LeaderLogStatus int32
+
+const (
+	LeaderLogStatus_LEADER_LOG_STATUS_UNSPECIFIED          LeaderLogStatus = 0
+	LeaderLogStatus_LEADER_LOG_STATUS_PENDING_CONFIRMATION LeaderLogStatus = 1
+	LeaderLogStatus_LEADER_LOG_STATUS_CONFIRMED            LeaderLogStatus = 2
+)
+
+// Enum value maps for LeaderLogStatus.
+var (
+	LeaderLogStatus_name = map[int32]string{
+		0: "LEADER_LOG_STATUS_UNSPECIFIED",
+		1: "LEADER_LOG_STATUS_PENDING_CONFIRMATION",
+		2: "LEADER_LOG_STATUS_CONFIRMED",
+	}
+	LeaderLogStatus_value = map[string]int32{
+		"LEADER_LOG_STATUS_UNSPECIFIED":          0,
+		"LEADER_LOG_STATUS_PENDING_CONFIRMATION": 1,
+		"LEADER_LOG_STATUS_CONFIRMED":            2,
+	}
+)
+
+func (x LeaderLogStatus) Enum() *LeaderLogStatus {
+	p := new(LeaderLogStatus)
+	*p = x
+	return p
+}
+
+func (x LeaderLogStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LeaderLogStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_visualiser_proto_enumTypes[0].Descriptor()
+}
+
+func (LeaderLogStatus) Type() protoreflect.EnumType {
+	return &file_proto_visualiser_proto_enumTypes[0]
+}
+
+func (x LeaderLogStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LeaderLogStatus.Descriptor instead.
+func (LeaderLogStatus) EnumDescriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{0}
+}
+
 type EnvironmentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -469,6 +518,186 @@ func (x *RobotDataResponse) GetRobots() []*RobotInfo {
 	return nil
 }
 
+type LeaderLogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderLogRequest) Reset() {
+	*x = LeaderLogRequest{}
+	mi := &file_proto_visualiser_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderLogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderLogRequest) ProtoMessage() {}
+
+func (x *LeaderLogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderLogRequest.ProtoReflect.Descriptor instead.
+func (*LeaderLogRequest) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{8}
+}
+
+type LeaderLogEntry struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	CurrentLeader   string                 `protobuf:"bytes,1,opt,name=current_leader,json=currentLeader,proto3" json:"current_leader,omitempty"`
+	Term            int64                  `protobuf:"varint,2,opt,name=term,proto3" json:"term,omitempty"`
+	Index           int64                  `protobuf:"varint,3,opt,name=index,proto3" json:"index,omitempty"`
+	Message         string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	Status          LeaderLogStatus        `protobuf:"varint,5,opt,name=status,proto3,enum=swarm.LeaderLogStatus" json:"status,omitempty"`
+	TimestampUnixMs int64                  `protobuf:"varint,6,opt,name=timestamp_unix_ms,json=timestampUnixMs,proto3" json:"timestamp_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *LeaderLogEntry) Reset() {
+	*x = LeaderLogEntry{}
+	mi := &file_proto_visualiser_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderLogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderLogEntry) ProtoMessage() {}
+
+func (x *LeaderLogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderLogEntry.ProtoReflect.Descriptor instead.
+func (*LeaderLogEntry) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *LeaderLogEntry) GetCurrentLeader() string {
+	if x != nil {
+		return x.CurrentLeader
+	}
+	return ""
+}
+
+func (x *LeaderLogEntry) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *LeaderLogEntry) GetIndex() int64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *LeaderLogEntry) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LeaderLogEntry) GetStatus() LeaderLogStatus {
+	if x != nil {
+		return x.Status
+	}
+	return LeaderLogStatus_LEADER_LOG_STATUS_UNSPECIFIED
+}
+
+func (x *LeaderLogEntry) GetTimestampUnixMs() int64 {
+	if x != nil {
+		return x.TimestampUnixMs
+	}
+	return 0
+}
+
+type LeaderLogResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CurrentLeader string                 `protobuf:"bytes,1,opt,name=current_leader,json=currentLeader,proto3" json:"current_leader,omitempty"`
+	CurrentTerm   int64                  `protobuf:"varint,2,opt,name=current_term,json=currentTerm,proto3" json:"current_term,omitempty"`
+	Entries       []*LeaderLogEntry      `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderLogResponse) Reset() {
+	*x = LeaderLogResponse{}
+	mi := &file_proto_visualiser_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderLogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderLogResponse) ProtoMessage() {}
+
+func (x *LeaderLogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderLogResponse.ProtoReflect.Descriptor instead.
+func (*LeaderLogResponse) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *LeaderLogResponse) GetCurrentLeader() string {
+	if x != nil {
+		return x.CurrentLeader
+	}
+	return ""
+}
+
+func (x *LeaderLogResponse) GetCurrentTerm() int64 {
+	if x != nil {
+		return x.CurrentTerm
+	}
+	return 0
+}
+
+func (x *LeaderLogResponse) GetEntries() []*LeaderLogEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
 var File_proto_visualiser_proto protoreflect.FileDescriptor
 
 const file_proto_visualiser_proto_rawDesc = "" +
@@ -501,11 +730,28 @@ const file_proto_visualiser_proto_rawDesc = "" +
 	"\x13communication_range\x18\x06 \x01(\x01R\x12communicationRange\x12)\n" +
 	"\x11in_range_peer_ids\x18\a \x03(\tR\x0einRangePeerIds\"=\n" +
 	"\x11RobotDataResponse\x12(\n" +
-	"\x06robots\x18\x01 \x03(\v2\x10.swarm.RobotInfoR\x06robots2\xf8\x01\n" +
+	"\x06robots\x18\x01 \x03(\v2\x10.swarm.RobotInfoR\x06robots\"\x12\n" +
+	"\x10LeaderLogRequest\"\xd7\x01\n" +
+	"\x0eLeaderLogEntry\x12%\n" +
+	"\x0ecurrent_leader\x18\x01 \x01(\tR\rcurrentLeader\x12\x12\n" +
+	"\x04term\x18\x02 \x01(\x03R\x04term\x12\x14\n" +
+	"\x05index\x18\x03 \x01(\x03R\x05index\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12.\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x16.swarm.LeaderLogStatusR\x06status\x12*\n" +
+	"\x11timestamp_unix_ms\x18\x06 \x01(\x03R\x0ftimestampUnixMs\"\x8e\x01\n" +
+	"\x11LeaderLogResponse\x12%\n" +
+	"\x0ecurrent_leader\x18\x01 \x01(\tR\rcurrentLeader\x12!\n" +
+	"\fcurrent_term\x18\x02 \x01(\x03R\vcurrentTerm\x12/\n" +
+	"\aentries\x18\x03 \x03(\v2\x15.swarm.LeaderLogEntryR\aentries*\x81\x01\n" +
+	"\x0fLeaderLogStatus\x12!\n" +
+	"\x1dLEADER_LOG_STATUS_UNSPECIFIED\x10\x00\x12*\n" +
+	"&LEADER_LOG_STATUS_PENDING_CONFIRMATION\x10\x01\x12\x1f\n" +
+	"\x1bLEADER_LOG_STATUS_CONFIRMED\x10\x022\xbb\x02\n" +
 	"\x11VisualiserService\x12K\n" +
 	"\x12GetEnvironmentData\x12\x19.swarm.EnvironmentRequest\x1a\x1a.swarm.EnvironmentResponse\x12A\n" +
 	"\fGetRobotData\x12\x17.swarm.RobotDataRequest\x1a\x18.swarm.RobotDataResponse\x12S\n" +
-	"\x12SetSimulationPause\x12\x1d.swarm.SimulationPauseRequest\x1a\x1e.swarm.SimulationPauseResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
+	"\x12SetSimulationPause\x12\x1d.swarm.SimulationPauseRequest\x1a\x1e.swarm.SimulationPauseResponse\x12A\n" +
+	"\fGetLeaderLog\x12\x17.swarm.LeaderLogRequest\x1a\x18.swarm.LeaderLogResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
 
 var (
 	file_proto_visualiser_proto_rawDescOnce sync.Once
@@ -519,31 +765,40 @@ func file_proto_visualiser_proto_rawDescGZIP() []byte {
 	return file_proto_visualiser_proto_rawDescData
 }
 
-var file_proto_visualiser_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_visualiser_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_visualiser_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_proto_visualiser_proto_goTypes = []any{
-	(*EnvironmentRequest)(nil),      // 0: swarm.EnvironmentRequest
-	(*EnvironmentResponse)(nil),     // 1: swarm.EnvironmentResponse
-	(*SimulationPauseRequest)(nil),  // 2: swarm.SimulationPauseRequest
-	(*SimulationPauseResponse)(nil), // 3: swarm.SimulationPauseResponse
-	(*Obstacle)(nil),                // 4: swarm.Obstacle
-	(*RobotDataRequest)(nil),        // 5: swarm.RobotDataRequest
-	(*RobotInfo)(nil),               // 6: swarm.RobotInfo
-	(*RobotDataResponse)(nil),       // 7: swarm.RobotDataResponse
+	(LeaderLogStatus)(0),            // 0: swarm.LeaderLogStatus
+	(*EnvironmentRequest)(nil),      // 1: swarm.EnvironmentRequest
+	(*EnvironmentResponse)(nil),     // 2: swarm.EnvironmentResponse
+	(*SimulationPauseRequest)(nil),  // 3: swarm.SimulationPauseRequest
+	(*SimulationPauseResponse)(nil), // 4: swarm.SimulationPauseResponse
+	(*Obstacle)(nil),                // 5: swarm.Obstacle
+	(*RobotDataRequest)(nil),        // 6: swarm.RobotDataRequest
+	(*RobotInfo)(nil),               // 7: swarm.RobotInfo
+	(*RobotDataResponse)(nil),       // 8: swarm.RobotDataResponse
+	(*LeaderLogRequest)(nil),        // 9: swarm.LeaderLogRequest
+	(*LeaderLogEntry)(nil),          // 10: swarm.LeaderLogEntry
+	(*LeaderLogResponse)(nil),       // 11: swarm.LeaderLogResponse
 }
 var file_proto_visualiser_proto_depIdxs = []int32{
-	4, // 0: swarm.EnvironmentResponse.obstacles:type_name -> swarm.Obstacle
-	6, // 1: swarm.RobotDataResponse.robots:type_name -> swarm.RobotInfo
-	0, // 2: swarm.VisualiserService.GetEnvironmentData:input_type -> swarm.EnvironmentRequest
-	5, // 3: swarm.VisualiserService.GetRobotData:input_type -> swarm.RobotDataRequest
-	2, // 4: swarm.VisualiserService.SetSimulationPause:input_type -> swarm.SimulationPauseRequest
-	1, // 5: swarm.VisualiserService.GetEnvironmentData:output_type -> swarm.EnvironmentResponse
-	7, // 6: swarm.VisualiserService.GetRobotData:output_type -> swarm.RobotDataResponse
-	3, // 7: swarm.VisualiserService.SetSimulationPause:output_type -> swarm.SimulationPauseResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	5,  // 0: swarm.EnvironmentResponse.obstacles:type_name -> swarm.Obstacle
+	7,  // 1: swarm.RobotDataResponse.robots:type_name -> swarm.RobotInfo
+	0,  // 2: swarm.LeaderLogEntry.status:type_name -> swarm.LeaderLogStatus
+	10, // 3: swarm.LeaderLogResponse.entries:type_name -> swarm.LeaderLogEntry
+	1,  // 4: swarm.VisualiserService.GetEnvironmentData:input_type -> swarm.EnvironmentRequest
+	6,  // 5: swarm.VisualiserService.GetRobotData:input_type -> swarm.RobotDataRequest
+	3,  // 6: swarm.VisualiserService.SetSimulationPause:input_type -> swarm.SimulationPauseRequest
+	9,  // 7: swarm.VisualiserService.GetLeaderLog:input_type -> swarm.LeaderLogRequest
+	2,  // 8: swarm.VisualiserService.GetEnvironmentData:output_type -> swarm.EnvironmentResponse
+	8,  // 9: swarm.VisualiserService.GetRobotData:output_type -> swarm.RobotDataResponse
+	4,  // 10: swarm.VisualiserService.SetSimulationPause:output_type -> swarm.SimulationPauseResponse
+	11, // 11: swarm.VisualiserService.GetLeaderLog:output_type -> swarm.LeaderLogResponse
+	8,  // [8:12] is the sub-list for method output_type
+	4,  // [4:8] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proto_visualiser_proto_init() }
@@ -556,13 +811,14 @@ func file_proto_visualiser_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_visualiser_proto_rawDesc), len(file_proto_visualiser_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   8,
+			NumEnums:      1,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_visualiser_proto_goTypes,
 		DependencyIndexes: file_proto_visualiser_proto_depIdxs,
+		EnumInfos:         file_proto_visualiser_proto_enumTypes,
 		MessageInfos:      file_proto_visualiser_proto_msgTypes,
 	}.Build()
 	File_proto_visualiser_proto = out.File

@@ -50,10 +50,11 @@ type Robot struct {
 	Y       float64
 	Heading float64
 
-	Client   pb.RobotServiceClient
-	Clock    *LamportClock
-	lastSync time.Time
-	paused   bool
+	Client       pb.RobotServiceClient
+	RaftObserver pb.RaftObserverServiceClient
+	Clock        *LamportClock
+	lastSync     time.Time
+	paused       bool
 
 	store               *KnowledgeStore
 	networkMu           sync.RWMutex
@@ -129,6 +130,12 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r.gossip = NewGossipEngine(r, r.sendGossipMessage)
 	r.gossip.Start()
 	return r
+}
+
+func (r *Robot) SetRaftObserverClient(client pb.RaftObserverServiceClient) {
+	r.mu.Lock()
+	r.RaftObserver = client
+	r.mu.Unlock()
 }
 
 func (r *Robot) Stop() {
@@ -213,7 +220,6 @@ func (r *Robot) tick(ctx context.Context) {
 
 	for _, obj := range sensorResp.GetObjects() {
 
-
 		if obj.GetType() == "obstacle" {
 			distX := obj.GetX() - currentX
 			distY := obj.GetY() - currentY
@@ -295,6 +301,68 @@ func (r *Robot) tickRaft(ctx context.Context) {
 	r.mu.Lock()
 	r.applyCommittedEntriesLocked()
 	r.mu.Unlock()
+
+	r.publishRaftSnapshot(ctx)
+}
+
+//helper function for publishRaftSnapshot
+func logMessageForSnapshot(entry RaftLogEntry) string {
+	switch entry.Type {
+	case "casualty_verified":
+		var casualty LandmarkEntry
+		if err := json.Unmarshal(entry.Payload, &casualty); err == nil {
+			return string(casualty.ID)
+		}
+		return string(entry.Payload)
+	case "leader_ping":
+		return string(entry.Payload)
+	default:
+		return string(entry.Payload)
+	}
+}
+
+// Sends the latest raft log entries to the RaftObserver (WorldEngine).
+// Only the leader sends snapshots
+// Called during each raft tick after applying committed entries
+func (r *Robot) publishRaftSnapshot(ctx context.Context) {
+	r.mu.Lock()
+	if r.raftState != raftLeader || r.RaftObserver == nil {
+		r.mu.Unlock()
+		return
+	}
+
+	const maxEntries = 120
+	start := 0
+	if len(r.raftLog) > maxEntries {
+		start = len(r.raftLog) - maxEntries
+	}
+
+	//RaftLogSnapshotEntry is defined by the proto file
+	entries := make([]*pb.RaftLogSnapshotEntry, 0, len(r.raftLog)-start)
+	for i := start; i < len(r.raftLog); i++ {
+		entry := r.raftLog[i]
+		entries = append(entries, &pb.RaftLogSnapshotEntry{
+			Term:            entry.Term,
+			Index:           entry.Index,
+			LogType:         entry.Type,
+			Message:         logMessageForSnapshot(entry),
+			TimestampUnixMs: entry.TimestampUnixMs,
+		})
+	}
+
+	// RaftLogSnapshotRequest is defined by the proto file; contains metadata about the snapshot and the log entries themselves
+	request := &pb.RaftLogSnapshotRequest{
+		LeaderId:    r.ID,
+		CurrentTerm: r.raftTerm,
+		CommitIndex: r.commitIndex,
+		Entries:     entries,
+	}
+	observer := r.RaftObserver
+	r.mu.Unlock()
+
+	if _, err := observer.PublishRaftLogSnapshot(ctx, request); err != nil {
+		log.Printf("[Raft] %s failed to publish raft snapshot: %v", r.ID, err)
+	}
 }
 
 // requestMovement picks a target position and asks the WorldEngine to move the robot there.
@@ -369,21 +437,21 @@ func (r *Robot) requestMovement(ctx context.Context) {
 // closestCasualty returns the entry from candidates that is nearest to this
 // robot's current position. Returns nil only if candidates is empty.
 func (r *Robot) closestCasualty(candidates []*LandmarkEntry) *LandmarkEntry {
-    if len(candidates) == 0 {
-        return nil
-    }
-    var closest *LandmarkEntry
-    minDist := math.MaxFloat64
-    for _, e := range candidates {
-        dx := e.Location.X - r.X
-        dy := e.Location.Y - r.Y
-        dist := math.Sqrt(dx*dx + dy*dy)
-        if dist < minDist {
-            minDist = dist
-            closest = e
-        }
-    }
-    return closest
+	if len(candidates) == 0 {
+		return nil
+	}
+	var closest *LandmarkEntry
+	minDist := math.MaxFloat64
+	for _, e := range candidates {
+		dx := e.Location.X - r.X
+		dy := e.Location.Y - r.Y
+		dist := math.Sqrt(dx*dx + dy*dy)
+		if dist < minDist {
+			minDist = dist
+			closest = e
+		}
+	}
+	return closest
 }
 
 func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {

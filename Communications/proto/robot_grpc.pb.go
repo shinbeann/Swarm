@@ -245,6 +245,112 @@ var RobotService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	RaftObserverService_PublishRaftLogSnapshot_FullMethodName = "/swarm.RaftObserverService/PublishRaftLogSnapshot"
+)
+
+// RaftObserverServiceClient is the client API for RaftObserverService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// RaftObserverService is hosted by the world so leaders can publish raft log snapshots.
+type RaftObserverServiceClient interface {
+	PublishRaftLogSnapshot(ctx context.Context, in *RaftLogSnapshotRequest, opts ...grpc.CallOption) (*RaftLogSnapshotResponse, error)
+}
+
+type raftObserverServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewRaftObserverServiceClient(cc grpc.ClientConnInterface) RaftObserverServiceClient {
+	return &raftObserverServiceClient{cc}
+}
+
+func (c *raftObserverServiceClient) PublishRaftLogSnapshot(ctx context.Context, in *RaftLogSnapshotRequest, opts ...grpc.CallOption) (*RaftLogSnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RaftLogSnapshotResponse)
+	err := c.cc.Invoke(ctx, RaftObserverService_PublishRaftLogSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RaftObserverServiceServer is the server API for RaftObserverService service.
+// All implementations must embed UnimplementedRaftObserverServiceServer
+// for forward compatibility.
+//
+// RaftObserverService is hosted by the world so leaders can publish raft log snapshots.
+type RaftObserverServiceServer interface {
+	PublishRaftLogSnapshot(context.Context, *RaftLogSnapshotRequest) (*RaftLogSnapshotResponse, error)
+	mustEmbedUnimplementedRaftObserverServiceServer()
+}
+
+// UnimplementedRaftObserverServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedRaftObserverServiceServer struct{}
+
+func (UnimplementedRaftObserverServiceServer) PublishRaftLogSnapshot(context.Context, *RaftLogSnapshotRequest) (*RaftLogSnapshotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PublishRaftLogSnapshot not implemented")
+}
+func (UnimplementedRaftObserverServiceServer) mustEmbedUnimplementedRaftObserverServiceServer() {}
+func (UnimplementedRaftObserverServiceServer) testEmbeddedByValue()                             {}
+
+// UnsafeRaftObserverServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to RaftObserverServiceServer will
+// result in compilation errors.
+type UnsafeRaftObserverServiceServer interface {
+	mustEmbedUnimplementedRaftObserverServiceServer()
+}
+
+func RegisterRaftObserverServiceServer(s grpc.ServiceRegistrar, srv RaftObserverServiceServer) {
+	// If the following call panics, it indicates UnimplementedRaftObserverServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&RaftObserverService_ServiceDesc, srv)
+}
+
+func _RaftObserverService_PublishRaftLogSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RaftLogSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RaftObserverServiceServer).PublishRaftLogSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RaftObserverService_PublishRaftLogSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RaftObserverServiceServer).PublishRaftLogSnapshot(ctx, req.(*RaftLogSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// RaftObserverService_ServiceDesc is the grpc.ServiceDesc for RaftObserverService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var RaftObserverService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "swarm.RaftObserverService",
+	HandlerType: (*RaftObserverServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "PublishRaftLogSnapshot",
+			Handler:    _RaftObserverService_PublishRaftLogSnapshot_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/robot.proto",
+}
+
+const (
 	PeerService_SyncData_FullMethodName     = "/swarm.PeerService/SyncData"
 	PeerService_RouteMessage_FullMethodName = "/swarm.PeerService/RouteMessage"
 )

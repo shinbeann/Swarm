@@ -602,6 +602,194 @@ func (x *HeartbeatResponse) GetHeading() float64 {
 	return 0
 }
 
+type RaftLogSnapshotRequest struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	LeaderId      string                  `protobuf:"bytes,1,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	CurrentTerm   int64                   `protobuf:"varint,2,opt,name=current_term,json=currentTerm,proto3" json:"current_term,omitempty"`
+	CommitIndex   int64                   `protobuf:"varint,3,opt,name=commit_index,json=commitIndex,proto3" json:"commit_index,omitempty"`
+	Entries       []*RaftLogSnapshotEntry `protobuf:"bytes,4,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RaftLogSnapshotRequest) Reset() {
+	*x = RaftLogSnapshotRequest{}
+	mi := &file_proto_robot_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RaftLogSnapshotRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RaftLogSnapshotRequest) ProtoMessage() {}
+
+func (x *RaftLogSnapshotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RaftLogSnapshotRequest.ProtoReflect.Descriptor instead.
+func (*RaftLogSnapshotRequest) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RaftLogSnapshotRequest) GetLeaderId() string {
+	if x != nil {
+		return x.LeaderId
+	}
+	return ""
+}
+
+func (x *RaftLogSnapshotRequest) GetCurrentTerm() int64 {
+	if x != nil {
+		return x.CurrentTerm
+	}
+	return 0
+}
+
+func (x *RaftLogSnapshotRequest) GetCommitIndex() int64 {
+	if x != nil {
+		return x.CommitIndex
+	}
+	return 0
+}
+
+func (x *RaftLogSnapshotRequest) GetEntries() []*RaftLogSnapshotEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type RaftLogSnapshotEntry struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Term            int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	Index           int64                  `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+	LogType         string                 `protobuf:"bytes,3,opt,name=log_type,json=logType,proto3" json:"log_type,omitempty"`
+	Message         string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	TimestampUnixMs int64                  `protobuf:"varint,5,opt,name=timestamp_unix_ms,json=timestampUnixMs,proto3" json:"timestamp_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RaftLogSnapshotEntry) Reset() {
+	*x = RaftLogSnapshotEntry{}
+	mi := &file_proto_robot_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RaftLogSnapshotEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RaftLogSnapshotEntry) ProtoMessage() {}
+
+func (x *RaftLogSnapshotEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RaftLogSnapshotEntry.ProtoReflect.Descriptor instead.
+func (*RaftLogSnapshotEntry) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RaftLogSnapshotEntry) GetTerm() int64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *RaftLogSnapshotEntry) GetIndex() int64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *RaftLogSnapshotEntry) GetLogType() string {
+	if x != nil {
+		return x.LogType
+	}
+	return ""
+}
+
+func (x *RaftLogSnapshotEntry) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *RaftLogSnapshotEntry) GetTimestampUnixMs() int64 {
+	if x != nil {
+		return x.TimestampUnixMs
+	}
+	return 0
+}
+
+type RaftLogSnapshotResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RaftLogSnapshotResponse) Reset() {
+	*x = RaftLogSnapshotResponse{}
+	mi := &file_proto_robot_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RaftLogSnapshotResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RaftLogSnapshotResponse) ProtoMessage() {}
+
+func (x *RaftLogSnapshotResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_robot_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RaftLogSnapshotResponse.ProtoReflect.Descriptor instead.
+func (*RaftLogSnapshotResponse) Descriptor() ([]byte, []int) {
+	return file_proto_robot_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RaftLogSnapshotResponse) GetAccepted() bool {
+	if x != nil {
+		return x.Accepted
+	}
+	return false
+}
+
 type PeerSyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SenderId      string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
@@ -613,7 +801,7 @@ type PeerSyncRequest struct {
 
 func (x *PeerSyncRequest) Reset() {
 	*x = PeerSyncRequest{}
-	mi := &file_proto_robot_proto_msgTypes[10]
+	mi := &file_proto_robot_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -625,7 +813,7 @@ func (x *PeerSyncRequest) String() string {
 func (*PeerSyncRequest) ProtoMessage() {}
 
 func (x *PeerSyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[10]
+	mi := &file_proto_robot_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -638,7 +826,7 @@ func (x *PeerSyncRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerSyncRequest.ProtoReflect.Descriptor instead.
 func (*PeerSyncRequest) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{10}
+	return file_proto_robot_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PeerSyncRequest) GetSenderId() string {
@@ -671,7 +859,7 @@ type PeerSyncResponse struct {
 
 func (x *PeerSyncResponse) Reset() {
 	*x = PeerSyncResponse{}
-	mi := &file_proto_robot_proto_msgTypes[11]
+	mi := &file_proto_robot_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +871,7 @@ func (x *PeerSyncResponse) String() string {
 func (*PeerSyncResponse) ProtoMessage() {}
 
 func (x *PeerSyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[11]
+	mi := &file_proto_robot_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +884,7 @@ func (x *PeerSyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerSyncResponse.ProtoReflect.Descriptor instead.
 func (*PeerSyncResponse) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{11}
+	return file_proto_robot_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PeerSyncResponse) GetReceived() bool {
@@ -719,7 +907,7 @@ type RoutedMessageRequest struct {
 
 func (x *RoutedMessageRequest) Reset() {
 	*x = RoutedMessageRequest{}
-	mi := &file_proto_robot_proto_msgTypes[12]
+	mi := &file_proto_robot_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -731,7 +919,7 @@ func (x *RoutedMessageRequest) String() string {
 func (*RoutedMessageRequest) ProtoMessage() {}
 
 func (x *RoutedMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[12]
+	mi := &file_proto_robot_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -744,7 +932,7 @@ func (x *RoutedMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoutedMessageRequest.ProtoReflect.Descriptor instead.
 func (*RoutedMessageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{12}
+	return file_proto_robot_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RoutedMessageRequest) GetSourceId() string {
@@ -792,7 +980,7 @@ type RoutedMessageResponse struct {
 
 func (x *RoutedMessageResponse) Reset() {
 	*x = RoutedMessageResponse{}
-	mi := &file_proto_robot_proto_msgTypes[13]
+	mi := &file_proto_robot_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +992,7 @@ func (x *RoutedMessageResponse) String() string {
 func (*RoutedMessageResponse) ProtoMessage() {}
 
 func (x *RoutedMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[13]
+	mi := &file_proto_robot_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +1005,7 @@ func (x *RoutedMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoutedMessageResponse.ProtoReflect.Descriptor instead.
 func (*RoutedMessageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{13}
+	return file_proto_robot_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RoutedMessageResponse) GetDelivered() bool {
@@ -846,7 +1034,7 @@ type VoteRequest struct {
 
 func (x *VoteRequest) Reset() {
 	*x = VoteRequest{}
-	mi := &file_proto_robot_proto_msgTypes[14]
+	mi := &file_proto_robot_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +1046,7 @@ func (x *VoteRequest) String() string {
 func (*VoteRequest) ProtoMessage() {}
 
 func (x *VoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[14]
+	mi := &file_proto_robot_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +1059,7 @@ func (x *VoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoteRequest.ProtoReflect.Descriptor instead.
 func (*VoteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{14}
+	return file_proto_robot_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *VoteRequest) GetTerm() int64 {
@@ -912,7 +1100,7 @@ type VoteResponse struct {
 
 func (x *VoteResponse) Reset() {
 	*x = VoteResponse{}
-	mi := &file_proto_robot_proto_msgTypes[15]
+	mi := &file_proto_robot_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -924,7 +1112,7 @@ func (x *VoteResponse) String() string {
 func (*VoteResponse) ProtoMessage() {}
 
 func (x *VoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[15]
+	mi := &file_proto_robot_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -937,7 +1125,7 @@ func (x *VoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoteResponse.ProtoReflect.Descriptor instead.
 func (*VoteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{15}
+	return file_proto_robot_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *VoteResponse) GetTerm() int64 {
@@ -966,7 +1154,7 @@ type RaftLogEntry struct {
 
 func (x *RaftLogEntry) Reset() {
 	*x = RaftLogEntry{}
-	mi := &file_proto_robot_proto_msgTypes[16]
+	mi := &file_proto_robot_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -978,7 +1166,7 @@ func (x *RaftLogEntry) String() string {
 func (*RaftLogEntry) ProtoMessage() {}
 
 func (x *RaftLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[16]
+	mi := &file_proto_robot_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -991,7 +1179,7 @@ func (x *RaftLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaftLogEntry.ProtoReflect.Descriptor instead.
 func (*RaftLogEntry) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{16}
+	return file_proto_robot_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RaftLogEntry) GetTerm() int64 {
@@ -1036,7 +1224,7 @@ type AppendEntriesRequest struct {
 
 func (x *AppendEntriesRequest) Reset() {
 	*x = AppendEntriesRequest{}
-	mi := &file_proto_robot_proto_msgTypes[17]
+	mi := &file_proto_robot_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1048,7 +1236,7 @@ func (x *AppendEntriesRequest) String() string {
 func (*AppendEntriesRequest) ProtoMessage() {}
 
 func (x *AppendEntriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[17]
+	mi := &file_proto_robot_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1061,7 +1249,7 @@ func (x *AppendEntriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesRequest.ProtoReflect.Descriptor instead.
 func (*AppendEntriesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{17}
+	return file_proto_robot_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *AppendEntriesRequest) GetTerm() int64 {
@@ -1116,7 +1304,7 @@ type AppendEntriesResponse struct {
 
 func (x *AppendEntriesResponse) Reset() {
 	*x = AppendEntriesResponse{}
-	mi := &file_proto_robot_proto_msgTypes[18]
+	mi := &file_proto_robot_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1128,7 +1316,7 @@ func (x *AppendEntriesResponse) String() string {
 func (*AppendEntriesResponse) ProtoMessage() {}
 
 func (x *AppendEntriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_robot_proto_msgTypes[18]
+	mi := &file_proto_robot_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1141,7 +1329,7 @@ func (x *AppendEntriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesResponse.ProtoReflect.Descriptor instead.
 func (*AppendEntriesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_robot_proto_rawDescGZIP(), []int{18}
+	return file_proto_robot_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AppendEntriesResponse) GetTerm() int64 {
@@ -1200,7 +1388,20 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
 	"\x01y\x18\x03 \x01(\x01R\x01y\x12\x18\n" +
-	"\aheading\x18\x04 \x01(\x01R\aheading\"m\n" +
+	"\aheading\x18\x04 \x01(\x01R\aheading\"\xb2\x01\n" +
+	"\x16RaftLogSnapshotRequest\x12\x1b\n" +
+	"\tleader_id\x18\x01 \x01(\tR\bleaderId\x12!\n" +
+	"\fcurrent_term\x18\x02 \x01(\x03R\vcurrentTerm\x12!\n" +
+	"\fcommit_index\x18\x03 \x01(\x03R\vcommitIndex\x125\n" +
+	"\aentries\x18\x04 \x03(\v2\x1b.swarm.RaftLogSnapshotEntryR\aentries\"\xa1\x01\n" +
+	"\x14RaftLogSnapshotEntry\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12\x14\n" +
+	"\x05index\x18\x02 \x01(\x03R\x05index\x12\x19\n" +
+	"\blog_type\x18\x03 \x01(\tR\alogType\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12*\n" +
+	"\x11timestamp_unix_ms\x18\x05 \x01(\x03R\x0ftimestampUnixMs\"5\n" +
+	"\x17RaftLogSnapshotResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted\"m\n" +
 	"\x0fPeerSyncRequest\x12\x1b\n" +
 	"\tsender_id\x18\x01 \x01(\tR\bsenderId\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12#\n" +
@@ -1243,7 +1444,9 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\x0eMoveToPosition\x12\x12.swarm.MoveRequest\x1a\x13.swarm.MoveResponse\x12<\n" +
 	"\rGetSensorData\x12\x14.swarm.SensorRequest\x1a\x15.swarm.SensorResponse\x12?\n" +
 	"\x0eGetNetworkData\x12\x15.swarm.NetworkRequest\x1a\x16.swarm.NetworkResponse\x12B\n" +
-	"\rSendHeartbeat\x12\x17.swarm.HeartbeatRequest\x1a\x18.swarm.HeartbeatResponse2\x95\x01\n" +
+	"\rSendHeartbeat\x12\x17.swarm.HeartbeatRequest\x1a\x18.swarm.HeartbeatResponse2n\n" +
+	"\x13RaftObserverService\x12W\n" +
+	"\x16PublishRaftLogSnapshot\x12\x1d.swarm.RaftLogSnapshotRequest\x1a\x1e.swarm.RaftLogSnapshotResponse2\x95\x01\n" +
 	"\vPeerService\x12;\n" +
 	"\bSyncData\x12\x16.swarm.PeerSyncRequest\x1a\x17.swarm.PeerSyncResponse\x12I\n" +
 	"\fRouteMessage\x12\x1b.swarm.RoutedMessageRequest\x1a\x1c.swarm.RoutedMessageResponse2\x91\x01\n" +
@@ -1263,53 +1466,59 @@ func file_proto_robot_proto_rawDescGZIP() []byte {
 	return file_proto_robot_proto_rawDescData
 }
 
-var file_proto_robot_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_proto_robot_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_proto_robot_proto_goTypes = []any{
-	(*MoveRequest)(nil),           // 0: swarm.MoveRequest
-	(*MoveResponse)(nil),          // 1: swarm.MoveResponse
-	(*SensorRequest)(nil),         // 2: swarm.SensorRequest
-	(*ObjectData)(nil),            // 3: swarm.ObjectData
-	(*SensorResponse)(nil),        // 4: swarm.SensorResponse
-	(*NetworkRequest)(nil),        // 5: swarm.NetworkRequest
-	(*NetworkData)(nil),           // 6: swarm.NetworkData
-	(*NetworkResponse)(nil),       // 7: swarm.NetworkResponse
-	(*HeartbeatRequest)(nil),      // 8: swarm.HeartbeatRequest
-	(*HeartbeatResponse)(nil),     // 9: swarm.HeartbeatResponse
-	(*PeerSyncRequest)(nil),       // 10: swarm.PeerSyncRequest
-	(*PeerSyncResponse)(nil),      // 11: swarm.PeerSyncResponse
-	(*RoutedMessageRequest)(nil),  // 12: swarm.RoutedMessageRequest
-	(*RoutedMessageResponse)(nil), // 13: swarm.RoutedMessageResponse
-	(*VoteRequest)(nil),           // 14: swarm.VoteRequest
-	(*VoteResponse)(nil),          // 15: swarm.VoteResponse
-	(*RaftLogEntry)(nil),          // 16: swarm.RaftLogEntry
-	(*AppendEntriesRequest)(nil),  // 17: swarm.AppendEntriesRequest
-	(*AppendEntriesResponse)(nil), // 18: swarm.AppendEntriesResponse
+	(*MoveRequest)(nil),             // 0: swarm.MoveRequest
+	(*MoveResponse)(nil),            // 1: swarm.MoveResponse
+	(*SensorRequest)(nil),           // 2: swarm.SensorRequest
+	(*ObjectData)(nil),              // 3: swarm.ObjectData
+	(*SensorResponse)(nil),          // 4: swarm.SensorResponse
+	(*NetworkRequest)(nil),          // 5: swarm.NetworkRequest
+	(*NetworkData)(nil),             // 6: swarm.NetworkData
+	(*NetworkResponse)(nil),         // 7: swarm.NetworkResponse
+	(*HeartbeatRequest)(nil),        // 8: swarm.HeartbeatRequest
+	(*HeartbeatResponse)(nil),       // 9: swarm.HeartbeatResponse
+	(*RaftLogSnapshotRequest)(nil),  // 10: swarm.RaftLogSnapshotRequest
+	(*RaftLogSnapshotEntry)(nil),    // 11: swarm.RaftLogSnapshotEntry
+	(*RaftLogSnapshotResponse)(nil), // 12: swarm.RaftLogSnapshotResponse
+	(*PeerSyncRequest)(nil),         // 13: swarm.PeerSyncRequest
+	(*PeerSyncResponse)(nil),        // 14: swarm.PeerSyncResponse
+	(*RoutedMessageRequest)(nil),    // 15: swarm.RoutedMessageRequest
+	(*RoutedMessageResponse)(nil),   // 16: swarm.RoutedMessageResponse
+	(*VoteRequest)(nil),             // 17: swarm.VoteRequest
+	(*VoteResponse)(nil),            // 18: swarm.VoteResponse
+	(*RaftLogEntry)(nil),            // 19: swarm.RaftLogEntry
+	(*AppendEntriesRequest)(nil),    // 20: swarm.AppendEntriesRequest
+	(*AppendEntriesResponse)(nil),   // 21: swarm.AppendEntriesResponse
 }
 var file_proto_robot_proto_depIdxs = []int32{
 	3,  // 0: swarm.SensorResponse.objects:type_name -> swarm.ObjectData
 	6,  // 1: swarm.NetworkResponse.network_conditions:type_name -> swarm.NetworkData
-	16, // 2: swarm.AppendEntriesRequest.entries:type_name -> swarm.RaftLogEntry
-	0,  // 3: swarm.RobotService.MoveToPosition:input_type -> swarm.MoveRequest
-	2,  // 4: swarm.RobotService.GetSensorData:input_type -> swarm.SensorRequest
-	5,  // 5: swarm.RobotService.GetNetworkData:input_type -> swarm.NetworkRequest
-	8,  // 6: swarm.RobotService.SendHeartbeat:input_type -> swarm.HeartbeatRequest
-	10, // 7: swarm.PeerService.SyncData:input_type -> swarm.PeerSyncRequest
-	12, // 8: swarm.PeerService.RouteMessage:input_type -> swarm.RoutedMessageRequest
-	14, // 9: swarm.RaftService.RequestVote:input_type -> swarm.VoteRequest
-	17, // 10: swarm.RaftService.AppendEntries:input_type -> swarm.AppendEntriesRequest
-	1,  // 11: swarm.RobotService.MoveToPosition:output_type -> swarm.MoveResponse
-	4,  // 12: swarm.RobotService.GetSensorData:output_type -> swarm.SensorResponse
-	7,  // 13: swarm.RobotService.GetNetworkData:output_type -> swarm.NetworkResponse
-	9,  // 14: swarm.RobotService.SendHeartbeat:output_type -> swarm.HeartbeatResponse
-	11, // 15: swarm.PeerService.SyncData:output_type -> swarm.PeerSyncResponse
-	13, // 16: swarm.PeerService.RouteMessage:output_type -> swarm.RoutedMessageResponse
-	15, // 17: swarm.RaftService.RequestVote:output_type -> swarm.VoteResponse
-	18, // 18: swarm.RaftService.AppendEntries:output_type -> swarm.AppendEntriesResponse
-	11, // [11:19] is the sub-list for method output_type
-	3,  // [3:11] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	11, // 2: swarm.RaftLogSnapshotRequest.entries:type_name -> swarm.RaftLogSnapshotEntry
+	19, // 3: swarm.AppendEntriesRequest.entries:type_name -> swarm.RaftLogEntry
+	0,  // 4: swarm.RobotService.MoveToPosition:input_type -> swarm.MoveRequest
+	2,  // 5: swarm.RobotService.GetSensorData:input_type -> swarm.SensorRequest
+	5,  // 6: swarm.RobotService.GetNetworkData:input_type -> swarm.NetworkRequest
+	8,  // 7: swarm.RobotService.SendHeartbeat:input_type -> swarm.HeartbeatRequest
+	10, // 8: swarm.RaftObserverService.PublishRaftLogSnapshot:input_type -> swarm.RaftLogSnapshotRequest
+	13, // 9: swarm.PeerService.SyncData:input_type -> swarm.PeerSyncRequest
+	15, // 10: swarm.PeerService.RouteMessage:input_type -> swarm.RoutedMessageRequest
+	17, // 11: swarm.RaftService.RequestVote:input_type -> swarm.VoteRequest
+	20, // 12: swarm.RaftService.AppendEntries:input_type -> swarm.AppendEntriesRequest
+	1,  // 13: swarm.RobotService.MoveToPosition:output_type -> swarm.MoveResponse
+	4,  // 14: swarm.RobotService.GetSensorData:output_type -> swarm.SensorResponse
+	7,  // 15: swarm.RobotService.GetNetworkData:output_type -> swarm.NetworkResponse
+	9,  // 16: swarm.RobotService.SendHeartbeat:output_type -> swarm.HeartbeatResponse
+	12, // 17: swarm.RaftObserverService.PublishRaftLogSnapshot:output_type -> swarm.RaftLogSnapshotResponse
+	14, // 18: swarm.PeerService.SyncData:output_type -> swarm.PeerSyncResponse
+	16, // 19: swarm.PeerService.RouteMessage:output_type -> swarm.RoutedMessageResponse
+	18, // 20: swarm.RaftService.RequestVote:output_type -> swarm.VoteResponse
+	21, // 21: swarm.RaftService.AppendEntries:output_type -> swarm.AppendEntriesResponse
+	13, // [13:22] is the sub-list for method output_type
+	4,  // [4:13] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proto_robot_proto_init() }
@@ -1323,9 +1532,9 @@ func file_proto_robot_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_robot_proto_rawDesc), len(file_proto_robot_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   22,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_proto_robot_proto_goTypes,
 		DependencyIndexes: file_proto_robot_proto_depIdxs,

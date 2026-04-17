@@ -30,6 +30,49 @@ type wsControlMessage struct {
 	Pause *bool  `json:"pause,omitempty"`
 }
 
+type wsLeaderLogEntry struct {
+	CurrentLeader   string `json:"current_leader"`
+	Term            int64  `json:"term"`
+	Index           int64  `json:"index"`
+	Message         string `json:"message"`
+	Status          int32  `json:"status"`
+	TimestampUnixMs int64  `json:"timestamp_unix_ms"`
+}
+
+type wsLeaderLogData struct {
+	CurrentLeader string             `json:"current_leader"`
+	CurrentTerm   int64              `json:"current_term"`
+	Entries       []wsLeaderLogEntry `json:"entries"`
+}
+
+func toWSLeaderLogData(resp *pb.LeaderLogResponse) wsLeaderLogData {
+	if resp == nil {
+		return wsLeaderLogData{}
+	}
+
+	entries := make([]wsLeaderLogEntry, 0, len(resp.GetEntries()))
+	for _, entry := range resp.GetEntries() {
+		if entry == nil {
+			continue
+		}
+
+		entries = append(entries, wsLeaderLogEntry{
+			CurrentLeader:   entry.GetCurrentLeader(),
+			Term:            entry.GetTerm(),
+			Index:           entry.GetIndex(),
+			Message:         entry.GetMessage(),
+			Status:          int32(entry.GetStatus()),
+			TimestampUnixMs: entry.GetTimestampUnixMs(),
+		})
+	}
+
+	return wsLeaderLogData{
+		CurrentLeader: resp.GetCurrentLeader(),
+		CurrentTerm:   resp.GetCurrentTerm(),
+		Entries:       entries,
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -77,7 +120,7 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 	defer ws.Close()
 
 	// Control loop to fetch data from WorldEngine and stream to UI
-	ticker := time.NewTicker(33 * time.Millisecond) // 30 FPS update rate for example
+	ticker := time.NewTicker(33 * time.Millisecond) // 30 FPS update rate
 	defer ticker.Stop()
 
 	controlCh := make(chan wsControlMessage)
@@ -141,10 +184,18 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 				continue
 			}
 
+			leaderLogResp, err := client.GetLeaderLog(context.Background(), &pb.LeaderLogRequest{})
+			if err != nil {
+				log.Printf("Error fetching leader log: %v", err)
+				leaderLogResp = &pb.LeaderLogResponse{}
+			}
+			leaderLogPayload := toWSLeaderLogData(leaderLogResp)
+
 			// Combine and send to WebSocket client
 			payload := map[string]interface{}{
 				"environment": envResp,
 				"robots":      robResp.GetRobots(),
+				"leader_log":  leaderLogPayload,
 			}
 
 			if err := ws.WriteJSON(payload); err != nil {

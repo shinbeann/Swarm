@@ -10,6 +10,8 @@ service VisualiserService {
   rpc GetRobotData(RobotDataRequest) returns (RobotDataResponse);
   // visualiser toggles simulation pause state across world and robots.
   rpc SetSimulationPause(SimulationPauseRequest) returns (SimulationPauseResponse);
+  // visualiser requests the latest leader raft log snapshot.
+  rpc GetLeaderLog(LeaderLogRequest) returns (LeaderLogResponse);
 }
 
 message EnvironmentRequest {}
@@ -52,4 +54,27 @@ message RobotInfo {
 
 message RobotDataResponse {
   repeated RobotInfo robots = 1;
+}
+
+message LeaderLogRequest {}
+
+enum LeaderLogStatus {
+  LEADER_LOG_STATUS_UNSPECIFIED = 0;
+  LEADER_LOG_STATUS_PENDING_CONFIRMATION = 1;
+  LEADER_LOG_STATUS_CONFIRMED = 2;
+}
+
+message LeaderLogEntry {
+  string current_leader = 1;
+  int64 term = 2;
+  int64 index = 3;
+  string message = 4;
+  LeaderLogStatus status = 5;
+  int64 timestamp_unix_ms = 6;
+}
+
+message LeaderLogResponse {
+  string current_leader = 1;
+  int64 current_term = 2;
+  repeated LeaderLogEntry entries = 3;
 }

@@ -15,6 +15,11 @@ service RobotService {
   rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }
 
+// RaftObserverService is hosted by the world so leaders can publish raft log snapshots.
+service RaftObserverService {
+  rpc PublishRaftLogSnapshot(RaftLogSnapshotRequest) returns (RaftLogSnapshotResponse);
+}
+
 message MoveRequest {
   string robot_id = 1;
   // Absolute target position in world coordinates
@@ -77,6 +82,25 @@ message HeartbeatResponse {
   double heading = 4;
 }
 
+message RaftLogSnapshotRequest {
+  string leader_id = 1;
+  int64 current_term = 2;
+  int64 commit_index = 3;
+  repeated RaftLogSnapshotEntry entries = 4;
+}
+
+message RaftLogSnapshotEntry {
+  int64 term = 1;
+  int64 index = 2;
+  string log_type = 3;
+  string message = 4;
+  int64 timestamp_unix_ms = 5;
+}
+
+message RaftLogSnapshotResponse {
+  bool accepted = 1;
+}
+
 // PeerService is hosted by the robots to communicate heavily constrained data with neighbors
 service PeerService {
   rpc SyncData(PeerSyncRequest) returns (PeerSyncResponse);
@@ -84,6 +108,8 @@ service PeerService {
 }
 
 // RaftService is hosted by robots for dedicated leader election and log replication traffic.
+// DEPRECATED in favour of using PeerService to route Raft messages.
+// Not implemented in robot.go anymore.
 service RaftService {
   rpc RequestVote(VoteRequest) returns (VoteResponse);
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);

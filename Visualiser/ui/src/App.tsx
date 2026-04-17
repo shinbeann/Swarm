@@ -34,9 +34,25 @@ interface ControlAck {
     error?: string;
 }
 
+interface LeaderLogEntry {
+    current_leader: string;
+    term: number;
+    index: number;
+    message: string;
+    status: number;
+    timestamp_unix_ms: number;
+}
+
+interface LeaderLogData {
+    current_leader?: string;
+    current_term?: number;
+    entries?: LeaderLogEntry[];
+}
+
 interface StatePayload {
     environment?: Environment;
     robots?: Robot[];
+    leader_log?: LeaderLogData;
     control?: ControlAck;
 }
 
@@ -82,6 +98,9 @@ const hslToHexColor = (h: number, s: number, l: number): number => {
     return (red << 16) | (green << 8) | blue;
 };
 
+// Deterministic color generation based on Robot ID using a hash function.
+// Ensure that a specific Robot ID always gets the same color
+// Different IDs get colors that are visually spread apart
 const colorForRobot = (robotID: string): number => {
     let hash = 2166136261;
     for (let i = 0; i < robotID.length; i++) {
@@ -114,7 +133,10 @@ const drawDottedEllipse = (
     graphics.fill({color, alpha});
 };
 
+const isLeaderPingEntry = (entry: LeaderLogEntry): boolean => entry.message.startsWith('leader-ping:');
+
 function App() {
+    // these need to be mutable without causing React re-renders, so useRef
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const appRef = useRef<PIXI.Application | null>(null);
@@ -124,7 +146,8 @@ function App() {
     const commGraphicsRef = useRef<PIXI.Graphics | null>(null);
 
     const [env, setEnv] = useState<Environment>({ width: 1000, height: 1000, obstacles: [] });
-    const [robotCount, setRobotCount] = useState(0);
+    const [leaderLog, setLeaderLog] = useState<LeaderLogData>({ current_leader: '', current_term: 0, entries: [] });
+    const [hideLeaderPings, setHideLeaderPings] = useState(true);
     const [connected, setConnected] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [pausePending, setPausePending] = useState(false);
@@ -210,7 +233,10 @@ function App() {
                 if (data.robots && appRef.current) {
                     updateRobots(data.robots, appRef.current);
                     updateCommunicationOverlay(data.robots);
-                    setRobotCount(data.robots.length);
+                }
+
+                if (data.leader_log) {
+                    setLeaderLog(data.leader_log);
                 }
             } catch (err) {
                 setPausePending(false);
@@ -283,6 +309,23 @@ function App() {
             });
         }
     };
+
+    const statusLabel = (status: number) => {
+        if (status === 2) return 'Confirmed';
+        if (status === 1) return 'Pending confirmation';
+        return 'Unknown';
+    };
+
+    const statusClassName = (status: number) => {
+        if (status === 2) return 'confirmed';
+        if (status === 1) return 'pending';
+        return 'unknown';
+    };
+
+    const sortedLeaderEntries = (leaderLog.entries ?? []).slice().sort((a, b) => b.index - a.index);
+    const visibleLeaderEntries = hideLeaderPings
+        ? sortedLeaderEntries.filter((entry) => !isLeaderPingEntry(entry))
+        : sortedLeaderEntries;
 
     const updateCommunicationOverlay = (robots: Robot[]) => {
         const graphics = commGraphicsRef.current;
@@ -449,18 +492,47 @@ function App() {
 
             <main className="main-content">
                 <aside className="sidebar glass">
-                    <h2>Telemetry</h2>
-                    <div className="stat-box">
-                        <span className="label">Active Robots</span>
-                        <span className="value">{robotCount}</span>
+                    <h2>Leader Log</h2>
+                    <label className="leader-log-filter">
+                        <input
+                            type="checkbox"
+                            checked={hideLeaderPings}
+                            onChange={(event) => setHideLeaderPings(event.target.checked)}
+                        />
+                        <span>Hide leader ping entries</span>
+                    </label>
+                    <div className="leader-summary">
+                        <div className="summary-row">
+                            <span className="label">Current Leader</span>
+                            <span className="value">{leaderLog.current_leader || 'None'}</span>
+                        </div>
+                        <div className="summary-row">
+                            <span className="label">Current Term</span>
+                            <span className="value">{leaderLog.current_term ?? 0}</span>
+                        </div>
                     </div>
-                    <div className="stat-box">
-                        <span className="label">Environment</span>
-                        <span className="value">{env.width} x {env.height}</span>
-                    </div>
-                    <div className="stat-box">
-                        <span className="label">Simulation</span>
-                        <span className={`value ${isPaused ? 'paused-state' : ''}`}>{isPaused ? 'Paused' : 'Running'}</span>
+
+                    <div className="log-list" role="list" aria-label="Leader raft log entries">
+                        {visibleLeaderEntries.map((entry) => (
+                            <article className="log-entry" key={`${entry.term}-${entry.index}-${entry.timestamp_unix_ms}`} role="listitem">
+                                <div className="log-entry-top">
+                                    <span className="log-meta">Leader {entry.current_leader || leaderLog.current_leader || 'unknown'}</span>
+                                    <span className={`log-status ${statusClassName(entry.status)}`}>{statusLabel(entry.status)}</span>
+                                </div>
+                                <div className="log-grid">
+                                    <span>Term: {entry.term}</span>
+                                    <span>Index: {entry.index}</span>
+                                </div>
+                                <div className="log-message">{entry.message || '(empty message)'}</div>
+                            </article>
+                        ))}
+                        {visibleLeaderEntries.length === 0 && (
+                            <div className="log-empty">
+                                {hideLeaderPings && (leaderLog.entries ?? []).length > 0
+                                    ? 'No leader log entries match the current filter.'
+                                    : 'No leader log entries yet.'}
+                            </div>
+                        )}
                     </div>
                     {pauseError && <div className="control-error">{pauseError}</div>}
                 </aside>
