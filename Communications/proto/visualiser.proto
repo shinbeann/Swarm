@@ -12,6 +12,8 @@ service VisualiserService {
   rpc SetSimulationPause(SimulationPauseRequest) returns (SimulationPauseResponse);
   // visualiser requests the latest leader raft log snapshot.
   rpc GetLeaderLog(LeaderLogRequest) returns (LeaderLogResponse);
+  // visualiser removes a random robot from the simulation and signals it to shut down.
+  rpc KillRandomRobot(KillRandomRobotRequest) returns (KillRandomRobotResponse);
 }
 
 message EnvironmentRequest {}
@@ -77,4 +79,12 @@ message LeaderLogResponse {
   string current_leader = 1;
   int64 current_term = 2;
   repeated LeaderLogEntry entries = 3;
+}
+
+message KillRandomRobotRequest {}
+
+message KillRandomRobotResponse {
+  bool success = 1;
+  string killed_robot_id = 2;
+  string error = 3;
 }
