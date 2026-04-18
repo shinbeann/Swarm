@@ -149,6 +149,7 @@ function App() {
     const [env, setEnv] = useState<Environment>({ width: 1000, height: 1000, obstacles: [] });
     const [leaderLog, setLeaderLog] = useState<LeaderLogData>({ current_leader: '', current_term: 0, entries: [] });
     const [hideLeaderPings, setHideLeaderPings] = useState(true);
+    const [activeTool, setActiveTool] = useState<'leader-log' | 'robot-killer' | 'partioning'>('leader-log');
     const [connected, setConnected] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [pausePending, setPausePending] = useState(false);
@@ -363,6 +364,10 @@ function App() {
         ? sortedLeaderEntries.filter((entry) => !isLeaderPingEntry(entry))
         : sortedLeaderEntries;
 
+    const isLeaderLogTabActive = activeTool === 'leader-log';
+    const isRobotKillerTabActive = activeTool === 'robot-killer';
+    const isPartioningTabActive = activeTool === 'partioning';
+
     const updateCommunicationOverlay = (robots: Robot[]) => {
         const graphics = commGraphicsRef.current;
         if (!graphics) return;
@@ -528,64 +533,113 @@ function App() {
 
             <main className="main-content">
                 <aside className="sidebar glass">
-                    <h2>Leader Log</h2>
-                    <label className="leader-log-filter">
-                        <input
-                            type="checkbox"
-                            checked={hideLeaderPings}
-                            onChange={(event) => setHideLeaderPings(event.target.checked)}
-                        />
-                        <span>Hide leader ping entries</span>
-                    </label>
-                    <div className="leader-summary">
-                        <div className="summary-row">
-                            <span className="label">Current Leader</span>
-                            <span className="value">{leaderLog.current_leader || 'None'}</span>
-                        </div>
-                        <div className="summary-row">
-                            <span className="label">Current Term</span>
-                            <span className="value">{leaderLog.current_term ?? 0}</span>
-                        </div>
-                    </div>
-
-                    <div className="log-list" role="list" aria-label="Leader raft log entries">
-                        {visibleLeaderEntries.map((entry) => (
-                            <article className="log-entry" key={`${entry.term}-${entry.index}-${entry.timestamp_unix_ms}`} role="listitem">
-                                <div className="log-entry-top">
-                                    <span className="log-meta">Leader {entry.current_leader || leaderLog.current_leader || 'unknown'}</span>
-                                    <span className={`log-status ${statusClassName(entry.status)}`}>{statusLabel(entry.status)}</span>
-                                </div>
-                                <div className="log-grid">
-                                    <span>Term: {entry.term}</span>
-                                    <span>Index: {entry.index}</span>
-                                </div>
-                                <div className="log-message">{entry.message || '(empty message)'}</div>
-                            </article>
-                        ))}
-                        {visibleLeaderEntries.length === 0 && (
-                            <div className="log-empty">
-                                {hideLeaderPings && (leaderLog.entries ?? []).length > 0
-                                    ? 'No leader log entries match the current filter.'
-                                    : 'No leader log entries yet.'}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="kill-robot-section">
+                    <div className="sidebar-tabs" role="tablist" aria-label="Visualiser tools">
                         <button
                             type="button"
-                            className="kill-random-button"
-                            onClick={killRandomRobot}
-                            disabled={!connected || killPending || robotCount === 0}
+                            className={`sidebar-tab ${isLeaderLogTabActive ? 'active' : ''}`}
+                            onClick={() => setActiveTool('leader-log')}
+                            role="tab"
+                            aria-selected={isLeaderLogTabActive}
                         >
-                            {killPending ? 'Killing…' : 'Kill robot'}
+                            Leader Log
                         </button>
-                        {lastKilledId && (
-                            <div className="kill-robot-feedback" role="status">
-                                Removed <span className="mono">{lastKilledId}</span> from simulation
-                            </div>
+                        <button
+                            type="button"
+                            className={`sidebar-tab ${isRobotKillerTabActive ? 'active' : ''}`}
+                            onClick={() => setActiveTool('robot-killer')}
+                            role="tab"
+                            aria-selected={isRobotKillerTabActive}
+                        >
+                            Robot Killer
+                        </button>
+                        <button
+                            type="button"
+                            className={`sidebar-tab ${isPartioningTabActive ? 'active' : ''}`}
+                            onClick={() => setActiveTool('partioning')}
+                            role="tab"
+                            aria-selected={isPartioningTabActive}
+                        >
+                            Partioning
+                        </button>
+                    </div>
+
+                    <div className="sidebar-panel" role="tabpanel">
+                        {isLeaderLogTabActive && (
+                            <section className="tool-panel tool-panel-scrollable">
+                                <label className="leader-log-filter">
+                                    <input
+                                        type="checkbox"
+                                        checked={hideLeaderPings}
+                                        onChange={(event) => setHideLeaderPings(event.target.checked)}
+                                    />
+                                    <span>Hide leader ping entries</span>
+                                </label>
+                                <div className="leader-summary">
+                                    <div className="summary-row">
+                                        <span className="label">Current Leader</span>
+                                        <span className="value">{leaderLog.current_leader || 'None'}</span>
+                                    </div>
+                                    <div className="summary-row">
+                                        <span className="label">Current Term</span>
+                                        <span className="value">{leaderLog.current_term ?? 0}</span>
+                                    </div>
+                                </div>
+
+                                <div className="log-list" role="list" aria-label="Leader raft log entries">
+                                    {visibleLeaderEntries.map((entry) => (
+                                        <article className="log-entry" key={`${entry.term}-${entry.index}-${entry.timestamp_unix_ms}`} role="listitem">
+                                            <div className="log-entry-top">
+                                                <span className="log-meta">Leader {entry.current_leader || leaderLog.current_leader || 'unknown'}</span>
+                                                <span className={`log-status ${statusClassName(entry.status)}`}>{statusLabel(entry.status)}</span>
+                                            </div>
+                                            <div className="log-grid">
+                                                <span>Term: {entry.term}</span>
+                                                <span>Index: {entry.index}</span>
+                                            </div>
+                                            <div className="log-message">{entry.message || '(empty message)'}</div>
+                                        </article>
+                                    ))}
+                                    {visibleLeaderEntries.length === 0 && (
+                                        <div className="log-empty">
+                                            {hideLeaderPings && (leaderLog.entries ?? []).length > 0
+                                                ? 'No leader log entries match the current filter.'
+                                                : 'No leader log entries yet.'}
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
                         )}
-                        {killError && <div className="control-error">{killError}</div>}
+
+                        {isRobotKillerTabActive && (
+                            <section className="tool-panel">
+                                <div className="kill-robot-section">
+                                    <button
+                                        type="button"
+                                        className="kill-random-button"
+                                        onClick={killRandomRobot}
+                                        disabled={!connected || killPending || robotCount === 0}
+                                    >
+                                        {killPending ? 'Killing…' : 'Kill robot'}
+                                    </button>
+                                    {lastKilledId && (
+                                        <div className="kill-robot-feedback" role="status">
+                                            Removed <span className="mono">{lastKilledId}</span> from simulation
+                                        </div>
+                                    )}
+                                    {killError && <div className="control-error">{killError}</div>}
+                                </div>
+                            </section>
+                        )}
+
+                        {isPartioningTabActive && (
+                            <section className="tool-panel">
+                                <div className="kill-robot-section">
+                                    <div className="kill-robot-feedback" role="status">
+                                        Partioning tools will appear here.
+                                    </div>
+                                </div>
+                            </section>
+                        )}
                     </div>
 
                     {pauseError && <div className="control-error">{pauseError}</div>}
