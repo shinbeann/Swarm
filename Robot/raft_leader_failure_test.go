@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// F1: Majority replicated but uncommitted logs
+// Objective: verify a leader's majority-replicated entry becomes committed only after a current-term entry is committed.
+// Expected output: the old entry remains uncommitted until the new leader-term entry advances commitIndex to 1.
 func TestRaftLeaderFailureMajorityReplicatedUncommitted(t *testing.T) {
 	robots := setupCluster(5)
 	r1, r2, r3, r4, r5 := robots[0], robots[1], robots[2], robots[3], robots[4]
@@ -64,7 +65,8 @@ func TestRaftLeaderFailureMajorityReplicatedUncommitted(t *testing.T) {
 	}
 }
 
-// F2: Minority replicated logs overwritting
+// Objective: verify minority-replicated logs are overwritten by a new leader with the majority history.
+// Expected output: r2 accepts the new leader's log and replaces the minority entry with the majority entry.
 func TestRaftLeaderFailureMinorityOverwritten(t *testing.T) {
 	robots := setupCluster(5)
 	r1, r2, r3, r4, r5 := robots[0], robots[1], robots[2], robots[3], robots[4]
@@ -95,7 +97,8 @@ func TestRaftLeaderFailureMinorityOverwritten(t *testing.T) {
 	}
 }
 
-// F3: Minority follower has uncommitted logs, becomes leader, and replicates them
+// Objective: verify a minority follower can become leader, backtrack followers, and commit its prior uncommitted log.
+// Expected output: r2 wins the election, replicates the old entry, and commits both the old and new entries.
 func TestRaftLeaderFailureMinorityElectedReplicates(t *testing.T) {
 	robots := setupCluster(5)
 	r1, r2, r3, r4, r5 := robots[0], robots[1], robots[2], robots[3], robots[4]

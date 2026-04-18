@@ -8,7 +8,8 @@ import (
 // BL means Becoming Leader
 // L means Leader
 
-// BL1/BL2: nextIndex and matchIndex initialization
+// Objective: verify leader initialization sets nextIndex and matchIndex correctly.
+// Expected output: followers start with nextIndex equal to log length, matchIndex at -1, and self matchIndex at the last log index.
 func TestRaftLeaderInitIndices(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -42,7 +43,8 @@ func TestRaftLeaderInitIndices(t *testing.T) {
 	}
 }
 
-// L1: Heartbeat to in-sync follower
+// Objective: verify an in-sync follower accepts a heartbeat with no log entries.
+// Expected output: the heartbeat carries zero entries and the follower accepts it.
 func TestRaftLeaderHeartbeatInSync(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -64,7 +66,8 @@ func TestRaftLeaderHeartbeatInSync(t *testing.T) {
 	}
 }
 
-// L2: Heartbeat to out-of-sync follower
+// Objective: verify an out-of-sync follower rejects a heartbeat built from an incorrect nextIndex.
+// Expected output: the append response is unsuccessful.
 func TestRaftLeaderHeartbeatOutOfSync(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -90,7 +93,8 @@ func TestRaftLeaderHeartbeatOutOfSync(t *testing.T) {
 	}
 }
 
-// L3: Backtracking correction
+// Objective: verify the leader backtracks nextIndex until a follower accepts the full log prefix.
+// Expected output: the first three append attempts fail, the fourth succeeds, and the follower ends with all three entries.
 func TestRaftLeaderBacktracking(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]

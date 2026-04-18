@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// Objective: verify candidate vote retries are paced by the retry interval.
+// Expected output: the first and post-interval vote attempts return true, and the mid-interval attempt returns false.
 func TestCandidateVoteRetryPacing(t *testing.T) {
 	r := NewRobot("r1", nil)
 	defer r.Stop()
@@ -31,6 +33,8 @@ func TestCandidateVoteRetryPacing(t *testing.T) {
 	r.mu.Unlock()
 }
 
+// Objective: verify a candidate-to-follower transition clears the vote retry timer.
+// Expected output: the follower transition resets lastVoteRequestAt to zero.
 func TestCandidateVoteRetryResetOnFollowerTransition(t *testing.T) {
 	r := NewRobot("r1", nil)
 	defer r.Stop()

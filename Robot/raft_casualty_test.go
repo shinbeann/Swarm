@@ -8,6 +8,8 @@ import (
 	pb "github.com/yihre/swarm-project/communications/proto"
 )
 
+// Objective: verify casualty verification is only recorded once the committed Raft entry is applied.
+// Expected output: the store remains unverified before commit and becomes verified after applyCommittedEntriesLocked runs.
 func TestRaftCasualtyVerification(t *testing.T) {
 	robot1 := NewRobot("robot1", nil)
 	robot1.raftState = raftLeader // Force it to be leader
@@ -70,6 +72,8 @@ func TestRaftCasualtyVerification(t *testing.T) {
 	}
 }
 
+// Objective: verify a follower applies casualty verification only after the leader commits the entry.
+// Expected output: the append succeeds, the follower stays unverified before commit, and becomes verified after commit.
 func TestFollowerAppliesCommittedCasualtyVerification(t *testing.T) {
 	follower := NewRobot("follower", nil)
 	follower.raftTerm = 1

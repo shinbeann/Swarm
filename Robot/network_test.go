@@ -18,6 +18,8 @@ func expectedDelayMs(latencyMs, bandwidthMbps, payloadMb float64) float64 {
 	return latencyMs + transferTimeSec*1000.0
 }
 
+// Objective: verify network constraints add the expected multi-hop delay.
+// Expected output: the simulated network call succeeds and takes at least the calculated latency.
 func TestMultiHopPacketLatency(t *testing.T) {
 	r := NewRobot("r1", nil)
 
@@ -43,6 +45,8 @@ func TestMultiHopPacketLatency(t *testing.T) {
 	}
 }
 
+// Objective: verify routing converges across advertisements and updates correctly after topology changes.
+// Expected output: r1 learns a 3-hop route, then shortens it to 1 hop, and the expired route is pruned.
 func TestRoutingConvergenceAndTopologyChanges(t *testing.T) {
 	r1, r2, r3, r4 := NewRobot("r1", nil), NewRobot("r2", nil), NewRobot("r3", nil), NewRobot("r4", nil)
 
@@ -79,6 +83,8 @@ func TestRoutingConvergenceAndTopologyChanges(t *testing.T) {
 	}
 }
 
+// Objective: verify a minority partition cannot elect a leader and the healed leader steps down on a higher term.
+// Expected output: the minority stays leaderless and r1 demotes to follower after the partition heals.
 func TestNetworkPartitionsAndRaftSplitBrain(t *testing.T) {
 	robots := setupCluster(5)
 	r1, r2, r3, r4, r5 := robots[0], robots[1], robots[2], robots[3], robots[4]
@@ -130,6 +136,8 @@ func TestNetworkPartitionsAndRaftSplitBrain(t *testing.T) {
 	}
 }
 
+// Objective: verify routed messages are dropped when TTL expires.
+// Expected output: the router reports the message as undelivered.
 func TestMeshTTLDrops(t *testing.T) {
 	r1 := NewRobot("r1", nil)
 

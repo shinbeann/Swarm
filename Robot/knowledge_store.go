@@ -75,8 +75,7 @@ func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
     return ks.mergeReportersLocked(entry, snapshot.Reporters, true)
 }
 
-// ApplyCasualtyVerified marks a casualty as verified only after a committed
-// Raft log entry is applied.
+// ApplyCasualtyVerified marks a casualty as verified only after a committed Raft log entry is applied.
 func (ks *KnowledgeStore) ApplyCasualtyVerified(snapshot *LandmarkEntry) {
     if snapshot == nil {
         return

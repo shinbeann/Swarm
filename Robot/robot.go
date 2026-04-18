@@ -747,6 +747,7 @@ func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
 		return false
 	}
 
+	// Giving a bit of time between vote requests to allow for responses to come back and avoid spamming the network with requests when there are issues.
 	if !r.lastVoteRequestAt.IsZero() && now.Sub(r.lastVoteRequestAt) < raftCandidateVoteRetry {
 		return false
 	}
@@ -870,6 +871,7 @@ func (r *Robot) handleVoteResponse(peerID string, resp *pb.VoteResponse) {
 	}
 
 	if resp.GetTerm() > r.raftTerm {
+		// have to give up leadership attempt if it learns of a higher term
 		r.becomeFollowerLocked(resp.GetTerm(), "")
 		return
 	}
@@ -1052,7 +1054,7 @@ func (r *Robot) becomeFollowerLocked(term int64, leaderID string) {
 	r.raftState = raftFollower
 	r.knownLeaderID = leaderID
 	r.votedFor = ""
-	r.lastVoteRequestAt = time.Time{}
+	r.lastVoteRequestAt = time.Time{} // resets to zero state
 	r.votesGranted = make(map[string]bool)
 	r.lastLeaderSeenAt = time.Now()
 	r.electionTimeout = randomElectionTimeout()
