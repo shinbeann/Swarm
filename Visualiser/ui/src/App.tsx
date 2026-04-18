@@ -32,6 +32,7 @@ interface ControlAck {
     ok?: boolean;
     is_paused?: boolean;
     error?: string;
+    killed_robot_id?: string;
 }
 
 interface LeaderLogEntry {
@@ -152,6 +153,10 @@ function App() {
     const [isPaused, setIsPaused] = useState(false);
     const [pausePending, setPausePending] = useState(false);
     const [pauseError, setPauseError] = useState<string | null>(null);
+    const [robotCount, setRobotCount] = useState(0);
+    const [killPending, setKillPending] = useState(false);
+    const [killError, setKillError] = useState<string | null>(null);
+    const [lastKilledId, setLastKilledId] = useState<string | null>(null);
 
     // Initialize PixiJS
     useEffect(() => {
@@ -206,6 +211,7 @@ function App() {
         ws.onclose = () => {
             setConnected(false);
             setPausePending(false);
+            setKillPending(false);
             console.log('Disconnected from server');
         };
 
@@ -223,6 +229,17 @@ function App() {
                     }
                 }
 
+                if (data.control?.type === 'kill_random_robot') {
+                    setKillPending(false);
+                    if (data.control.ok) {
+                        setKillError(null);
+                        setLastKilledId(data.control.killed_robot_id ?? null);
+                    } else {
+                        setKillError(data.control.error ?? 'Failed to kill robot');
+                        setLastKilledId(null);
+                    }
+                }
+
                 if (data.environment) {
                     setEnv(data.environment);
                     setIsPaused(Boolean(data.environment.is_paused));
@@ -231,6 +248,7 @@ function App() {
                     }
                 }
                 if (data.robots && appRef.current) {
+                    setRobotCount(data.robots.length);
                     updateRobots(data.robots, appRef.current);
                     updateCommunicationOverlay(data.robots);
                 }
@@ -240,6 +258,7 @@ function App() {
                 }
             } catch (err) {
                 setPausePending(false);
+                setKillPending(false);
                 console.error('Error parsing WebSocket message', err);
             }
         };
@@ -264,6 +283,23 @@ function App() {
             setPausePending(false);
             setPauseError('Failed to send pause command');
             console.error('Error sending pause command', error);
+        }
+    };
+
+    const killRandomRobot = () => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || killPending || robotCount === 0) return;
+
+        setKillPending(true);
+        setKillError(null);
+        setLastKilledId(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'kill_random_robot' }));
+        } catch (error) {
+            setKillPending(false);
+            setKillError('Failed to send kill command');
+            console.error('Error sending kill command', error);
         }
     };
 
@@ -534,6 +570,24 @@ function App() {
                             </div>
                         )}
                     </div>
+
+                    <div className="kill-robot-section">
+                        <button
+                            type="button"
+                            className="kill-random-button"
+                            onClick={killRandomRobot}
+                            disabled={!connected || killPending || robotCount === 0}
+                        >
+                            {killPending ? 'Killing…' : 'Kill robot'}
+                        </button>
+                        {lastKilledId && (
+                            <div className="kill-robot-feedback" role="status">
+                                Removed <span className="mono">{lastKilledId}</span> from simulation
+                            </div>
+                        )}
+                        {killError && <div className="control-error">{killError}</div>}
+                    </div>
+
                     {pauseError && <div className="control-error">{pauseError}</div>}
                 </aside>
 

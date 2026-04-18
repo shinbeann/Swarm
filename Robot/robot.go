@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"math/rand"
 	"strings"
 	"sync"
@@ -199,6 +200,10 @@ func (r *Robot) tick(ctx context.Context) {
 		r.Y = heartbeatResp.GetY()
 		r.Heading = heartbeatResp.GetHeading()
 		r.mu.Unlock()
+	} else if heartbeatResp != nil && !heartbeatResp.GetSuccess() {
+		log.Printf("world rejected heartbeat for %s — shutting down (removed from simulation)", r.ID)
+		r.Stop()
+		os.Exit(0)
 	}
 
 	r.refreshNetworkConditions(ctx) // getting new local network data regarding one-hop peers from world engine

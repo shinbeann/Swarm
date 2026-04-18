@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"math"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -76,6 +77,7 @@ type server struct {
 	landmarks                map[LandmarkID]*WorldLandmark
 	lastLandmarkSensorReport map[string]map[LandmarkID]time.Time
 	leaderLogSnapshots       map[string]*pb.RaftLogSnapshotRequest
+	terminatedRobotIDs       map[string]struct{}
 }
 
 // -------------------------------------------------------------------------
@@ -94,6 +96,7 @@ func newServer() *server {
 		landmarks:                make(map[LandmarkID]*WorldLandmark),
 		lastLandmarkSensorReport: make(map[string]map[LandmarkID]time.Time),
 		leaderLogSnapshots:       make(map[string]*pb.RaftLogSnapshotRequest),
+		terminatedRobotIDs:       make(map[string]struct{}),
 		paused:                   false,
 	}
 	s.spawnLandmarks()
@@ -136,6 +139,10 @@ func (s *server) spawnLandmarks() {
 func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if _, banned := s.terminatedRobotIDs[req.GetRobotId()]; banned {
+		return &pb.HeartbeatResponse{Success: false}, nil
+	}
 
 	state, exists := s.robots[req.GetRobotId()]
 	if !exists {
@@ -432,6 +439,36 @@ func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*p
 		})
 	}
 	return &pb.RobotDataResponse{Robots: rbts}, nil
+}
+
+func (s *server) KillRandomRobot(ctx context.Context, req *pb.KillRandomRobotRequest) (*pb.KillRandomRobotResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.robots) == 0 {
+		return &pb.KillRandomRobotResponse{
+			Success: false,
+			Error:   "no robots in simulation",
+		}, nil
+	}
+
+	ids := make([]string, 0, len(s.robots))
+	for id := range s.robots {
+		ids = append(ids, id)
+	}
+	victim := ids[rand.Intn(len(ids))]
+
+	delete(s.robots, victim)
+	delete(s.leaderLogSnapshots, victim)
+	delete(s.lastLandmarkSensorReport, victim)
+	s.terminatedRobotIDs[victim] = struct{}{}
+
+	log.Printf("[world] kill requested: removed robot %s from simulation", victim)
+
+	return &pb.KillRandomRobotResponse{
+		Success:       true,
+		KilledRobotId: victim,
+	}, nil
 }
 
 // -------------------------------------------------------------------------

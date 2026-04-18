@@ -148,26 +148,52 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 			log.Printf("Websocket read error: %v", err)
 			return
 		case msg := <-controlCh:
-			if msg.Type != "set_pause" || msg.Pause == nil {
+			switch msg.Type {
+			case "set_pause":
+				if msg.Pause == nil {
+					continue
+				}
+
+				pauseResp, err := client.SetSimulationPause(context.Background(), &pb.SimulationPauseRequest{Pause: *msg.Pause})
+				controlPayload := map[string]interface{}{
+					"type":      "set_pause",
+					"ok":        err == nil,
+					"is_paused": *msg.Pause,
+				}
+				if err != nil {
+					log.Printf("Error setting simulation pause: %v", err)
+					controlPayload["error"] = err.Error()
+				} else {
+					controlPayload["is_paused"] = pauseResp.GetIsPaused()
+				}
+
+				if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+					log.Printf("Error writing control ack to websocket: %v", err)
+					return
+				}
+
+			case "kill_random_robot":
+				killResp, err := client.KillRandomRobot(context.Background(), &pb.KillRandomRobotRequest{})
+				controlPayload := map[string]interface{}{
+					"type": "kill_random_robot",
+					"ok":   err == nil && killResp != nil && killResp.GetSuccess(),
+				}
+				if err != nil {
+					log.Printf("Error killing random robot: %v", err)
+					controlPayload["error"] = err.Error()
+				} else if killResp != nil && !killResp.GetSuccess() {
+					controlPayload["error"] = killResp.GetError()
+				} else if killResp != nil {
+					controlPayload["killed_robot_id"] = killResp.GetKilledRobotId()
+				}
+
+				if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+					log.Printf("Error writing control ack to websocket: %v", err)
+					return
+				}
+
+			default:
 				continue
-			}
-
-			pauseResp, err := client.SetSimulationPause(context.Background(), &pb.SimulationPauseRequest{Pause: *msg.Pause})
-			controlPayload := map[string]interface{}{
-				"type":      "set_pause",
-				"ok":        err == nil,
-				"is_paused": *msg.Pause,
-			}
-			if err != nil {
-				log.Printf("Error setting simulation pause: %v", err)
-				controlPayload["error"] = err.Error()
-			} else {
-				controlPayload["is_paused"] = pauseResp.GetIsPaused()
-			}
-
-			if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
-				log.Printf("Error writing control ack to websocket: %v", err)
-				return
 			}
 		case <-ticker.C:
 			// Fetch environment data

@@ -50,6 +50,7 @@ func (ks *KnowledgeStore) SetVerifiedCh(ch chan<- *LandmarkEntry) {
 	ks.verifiedCh = ch
 }
 
+// insert or update a landmark from a single robot ID
 func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, reporter RobotID, timestamp int) bool {
     ks.mu.Lock()
     defer ks.mu.Unlock()
@@ -63,6 +64,7 @@ func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, r
     return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp}, true)
 }
 
+// merge full landmark entry
 func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
     if snapshot == nil {
         return false
@@ -159,6 +161,7 @@ func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters m
     return false
 }
 
+// delete entry and its quorumSeen flag
 func (ks *KnowledgeStore) Remove(id LandmarkID) {
     ks.mu.Lock()
     defer ks.mu.Unlock()
