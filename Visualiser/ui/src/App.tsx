@@ -10,6 +10,9 @@ interface Robot {
     is_leader?: boolean;
     communication_range?: number;
     in_range_peer_ids?: string[];
+    raft_term?: number;
+    raft_log_index?: number;
+    commit_index?: number;
 }
 
 interface Obstacle {
@@ -491,7 +494,11 @@ function App() {
             sprite.y = robot.y * scaleY;
             sprite.rotation = robot.is_leader ? 0 : robot.heading;
 
-            label.text = robot.id.slice(0, 5);
+            const idPrefix = robot.id.slice(0, 5);
+            const term = robot.raft_term ?? 0;
+            const logIndex = robot.raft_log_index ?? -1;
+            const commitIndex = robot.commit_index ?? -1;
+            label.text = `${idPrefix} T:${term} I:${logIndex} C:${commitIndex}`;
             label.x = sprite.x + 11;
             label.y = sprite.y + 11;
         });

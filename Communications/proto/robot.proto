@@ -72,6 +72,9 @@ message HeartbeatRequest {
   // Leader ID this robot currently believes is authoritative.
   // Empty when no leader is currently known.
   string known_leader_id = 5;
+  int64 current_term = 6;
+  int64 last_log_index = 7;
+  int64 commit_index = 8;
 }
 
 message HeartbeatResponse {

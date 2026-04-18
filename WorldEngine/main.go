@@ -160,6 +160,9 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 
 	state.LastSeen = time.Now()
 	state.LastKnownLeaderID = req.GetKnownLeaderId()
+	state.Info.RaftTerm = req.GetCurrentTerm()
+	state.Info.RaftLogIndex = req.GetLastLogIndex()
+	state.Info.CommitIndex = req.GetCommitIndex()
 
 	return &pb.HeartbeatResponse{
 		Success: true,
@@ -436,6 +439,9 @@ func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*p
 			IsLeader:           id == leaderID,
 			CommunicationRange: communicationRange,
 			InRangePeerIds:     s.inRangePeerIDsLocked(id, sortedRobotIDs),
+			RaftTerm:           state.Info.RaftTerm,
+			RaftLogIndex:       state.Info.RaftLogIndex,
+			CommitIndex:        state.Info.CommitIndex,
 		})
 	}
 	return &pb.RobotDataResponse{Robots: rbts}, nil

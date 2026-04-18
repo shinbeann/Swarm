@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"os"
 	"math/rand"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -173,6 +173,13 @@ func (r *Robot) Run(ctx context.Context) {
 	}
 }
 
+func (r *Robot) lastRaftLogIndexLocked() int64 {
+	if len(r.raftLog) == 0 {
+		return -1
+	}
+	return r.raftLog[len(r.raftLog)-1].Index
+}
+
 func (r *Robot) tick(ctx context.Context) {
 	r.Clock.Tick()
 
@@ -181,6 +188,9 @@ func (r *Robot) tick(ctx context.Context) {
 	currentX := r.X
 	currentY := r.Y
 	currentHeading := r.Heading
+	currentTerm := r.raftTerm
+	lastLogIndex := r.lastRaftLogIndexLocked()
+	commitIndex := r.commitIndex
 	r.mu.Unlock()
 
 	// Heartbeat — WorldEngine returns the canonical position
@@ -190,6 +200,9 @@ func (r *Robot) tick(ctx context.Context) {
 		Y:             currentY,
 		Heading:       currentHeading,
 		KnownLeaderId: knownLeaderID,
+		CurrentTerm:   currentTerm,
+		LastLogIndex:  lastLogIndex,
+		CommitIndex:   commitIndex,
 	})
 	if err != nil {
 		log.Printf("worldheartbeat error: %v", err)

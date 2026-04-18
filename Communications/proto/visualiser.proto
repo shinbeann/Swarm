@@ -52,6 +52,9 @@ message RobotInfo {
   bool is_leader = 5;
   double communication_range = 6;
   repeated string in_range_peer_ids = 7;
+  int64 raft_term = 8;
+  int64 raft_log_index = 9;
+  int64 commit_index = 10;
 }
 
 message RobotDataResponse {

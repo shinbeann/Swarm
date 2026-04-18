@@ -504,6 +504,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // RaftService is hosted by robots for dedicated leader election and log replication traffic.
+// DEPRECATED in favour of using PeerService to route Raft messages.
+// Not implemented in robot.go anymore.
 type RaftServiceClient interface {
 	RequestVote(ctx context.Context, in *VoteRequest, opts ...grpc.CallOption) (*VoteResponse, error)
 	AppendEntries(ctx context.Context, in *AppendEntriesRequest, opts ...grpc.CallOption) (*AppendEntriesResponse, error)
@@ -542,6 +544,8 @@ func (c *raftServiceClient) AppendEntries(ctx context.Context, in *AppendEntries
 // for forward compatibility.
 //
 // RaftService is hosted by robots for dedicated leader election and log replication traffic.
+// DEPRECATED in favour of using PeerService to route Raft messages.
+// Not implemented in robot.go anymore.
 type RaftServiceServer interface {
 	RequestVote(context.Context, *VoteRequest) (*VoteResponse, error)
 	AppendEntries(context.Context, *AppendEntriesRequest) (*AppendEntriesResponse, error)
