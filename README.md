@@ -34,7 +34,7 @@ The entire swarm simulation is containerized and orchestrated via Docker Compose
 3. **View the Simulation:**
    Open a web browser and navigate to:
    ```
-   http://localhost:3000
+   http://localhost:3001
    ```
    You will see the live swarm dashboard charting the boundaries, obstacles, and tracked robots.
 
