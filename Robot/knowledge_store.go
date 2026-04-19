@@ -15,7 +15,6 @@ const (
 type KnowledgeStore struct {
 	mu         sync.RWMutex
 	entries    map[LandmarkID]*LandmarkEntry
-	verifiedCh chan<- *LandmarkEntry
     quorumSeen map[LandmarkID]bool
 }
 
@@ -40,14 +39,6 @@ func cloneLandmarkEntry(entry *LandmarkEntry) *LandmarkEntry {
     }
 
     return &clone
-}
-
-// SetVerifiedCh wires up the one-way notification channel.
-// Call this once during Robot construction, before gossip starts.
-func (ks *KnowledgeStore) SetVerifiedCh(ch chan<- *LandmarkEntry) {
-	ks.mu.Lock()
-	defer ks.mu.Unlock()
-	ks.verifiedCh = ch
 }
 
 // insert or update a landmark from a single robot ID
@@ -106,6 +97,29 @@ func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
 	return result
 }
 
+// PendingCasualtyVerifications returns casualty entries that have reached quorum
+// but have not yet been marked verified by a committed Raft entry.
+func (ks *KnowledgeStore) PendingCasualtyVerifications() []*LandmarkEntry {
+    ks.mu.RLock()
+    defer ks.mu.RUnlock()
+
+    result := make([]*LandmarkEntry, 0)
+    for _, entry := range ks.entries {
+        if entry.Type != LandmarkCasualty {
+            continue
+        }
+        if entry.Verified {
+            continue
+        }
+        if !ks.quorumSeen[entry.ID] {
+            continue
+        }
+        result = append(result, cloneLandmarkEntry(entry))
+    }
+
+    return result
+}
+
 func (ks *KnowledgeStore) ensureEntryLocked(id LandmarkID, ltype LandmarkType, loc Location) (*LandmarkEntry, bool) {
     entry, exists := ks.entries[id]
     if exists {
@@ -148,12 +162,6 @@ func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters m
         ks.quorumSeen[entry.ID] = true
         log.Printf("[KS] casualty %s reached quorum (%d reporters); awaiting raft commit",
             entry.ID, len(entry.Reporters))
-        if notifyQuorum && ks.verifiedCh != nil {
-            select {
-            case ks.verifiedCh <- cloneLandmarkEntry(entry):
-            default:
-            }
-        }
         return true
     }
 

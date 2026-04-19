@@ -177,6 +177,77 @@ func TestRobotOnPeerSyncSignalsQuorumButStaysUnverified(t *testing.T) {
 	}
 }
 
+// Objective: verify a leader appends a pending casualty verification once and only once.
+// Expected output: the first raft tick appends one casualty_verified entry, and the next tick does not append a duplicate.
+func TestLeaderAppendsPendingCasualtyVerificationOnce(t *testing.T) {
+	r := newTestRobot(t, "leader", &fakeRobotServiceClient{})
+	r.raftState = raftLeader
+
+	id := LandmarkID("casualty-once")
+	loc := Location{X: 180, Y: 240}
+	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-1", 1); verified {
+		t.Fatalf("expected first report to stay unverified")
+	}
+	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-2", 2); verified {
+		t.Fatalf("expected second report to stay unverified")
+	}
+	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
+		t.Fatalf("expected third report to signal quorum")
+	}
+
+	r.syncRaftWithPeers(context.Background())
+	if len(r.raftLog) != 1 {
+		t.Fatalf("expected one casualty_verified log entry after first leader tick, got %d", len(r.raftLog))
+	}
+	if r.raftLog[0].Type != "casualty_verified" {
+		t.Fatalf("expected casualty_verified log entry, got %s", r.raftLog[0].Type)
+	}
+
+	r.syncRaftWithPeers(context.Background())
+	if len(r.raftLog) != 1 {
+		t.Fatalf("expected no duplicate casualty_verified log entries, got %d", len(r.raftLog))
+	}
+}
+
+// Objective: verify a stale queued verification does not create a duplicate once the casualty is already committed.
+// Expected output: the leader keeps a single casualty_verified log entry even if the channel still contains an old notification.
+func TestLeaderIgnoresStaleVerificationNotificationAfterCommit(t *testing.T) {
+	r := newTestRobot(t, "leader", &fakeRobotServiceClient{})
+	r.raftState = raftLeader
+
+	id := LandmarkID("casualty-stale")
+	loc := Location{X: 200, Y: 260}
+	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-1", 1); verified {
+		t.Fatalf("expected first report to stay unverified")
+	}
+	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-2", 2); verified {
+		t.Fatalf("expected second report to stay unverified")
+	}
+	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
+		t.Fatalf("expected third report to signal quorum")
+	}
+
+	r.syncRaftWithPeers(context.Background())
+	if len(r.raftLog) != 1 {
+		t.Fatalf("expected one casualty_verified log entry before commit, got %d", len(r.raftLog))
+	}
+
+	r.mu.Lock()
+	r.commitIndex = int64(len(r.raftLog) - 1)
+	r.applyCommittedEntriesLocked()
+	r.mu.Unlock()
+
+	r.syncRaftWithPeers(context.Background())
+	if len(r.raftLog) != 1 {
+		t.Fatalf("expected committed casualty not to be appended again, got %d entries", len(r.raftLog))
+	}
+
+	entry := findEntry(t, r.store, id)
+	if !entry.Verified {
+		t.Fatalf("expected casualty to remain verified after stale notification")
+	}
+}
+
 // Objective: verify relayed gossip does not turn the relay peer into an eyewitness reporter.
 // Expected output: only the original eyewitness remains in the reporters set.
 func TestRobotOnPeerSyncPreservesEyewitnessProvenanceAcrossRelay(t *testing.T) {

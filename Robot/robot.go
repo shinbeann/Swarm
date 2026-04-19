@@ -63,10 +63,6 @@ type Robot struct {
 	gossip              *GossipEngine
 	discoveredLandmarks map[LandmarkID]bool
 
-	// casualtyVerifiedCh carries notifications from the KnowledgeStore to the Raft
-	// leader logic. Buffered so KS.Add() never blocks waiting for tickRaft.
-	casualtyVerifiedCh chan *LandmarkEntry
-
 	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true
 	nearObstacle  bool
 	obstacleAngle float64
@@ -123,10 +119,6 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 
 	r.routingTable = NewRoutingTable(RobotID(id))
 	r.meshRouter = NewMeshRouter(r)
-
-	ch := make(chan *LandmarkEntry, 16)
-	r.casualtyVerifiedCh = ch
-	r.store.SetVerifiedCh(ch)
 
 	r.gossip = NewGossipEngine(r, r.sendGossipMessage)
 	r.gossip.Start()
@@ -566,7 +558,6 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 	now := time.Now()
 	state := r.raftState
 	if state == raftLeader {
-		r.maybeAppendLeaderPingLocked(now)
 		r.appendVerifiedCasualtiesLocked(now)
 	}
 	sendCandidateVotes := false
@@ -774,44 +765,54 @@ func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
 	return true
 }
 
-// appendVerifiedCasualtiesLocked checks the notification channel and appends a
-// casualty_verified log entry for each newly verified casualty.
+// appendVerifiedCasualtiesLocked scans the store for casualty entries that have
+// reached quorum and appends each one exactly once.
 // Must be called with r.mu held.
 func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 	if r.raftState != raftLeader {
-		// Drain the channel so it does not fill up on non-leader robots.
-		for {
-			select {
-			case <-r.casualtyVerifiedCh:
-			default:
-				return
-			}
+		return
+	}
+
+	for _, entry := range r.store.PendingCasualtyVerifications() {
+		if r.hasCasualtyVerificationLogLocked(entry.ID) {
+			continue
+		}
+
+		payload, err := json.Marshal(entry)
+		if err != nil {
+			log.Printf("[Raft] failed to marshal casualty_verified payload: %v", err)
+			continue
+		}
+		logEntry := RaftLogEntry{
+			Term:            r.raftTerm,
+			Index:           int64(len(r.raftLog)),
+			Type:            "casualty_verified",
+			Payload:         payload,
+			TimestampUnixMs: now.UnixMilli(),
+		}
+		r.raftLog = append(r.raftLog, logEntry)
+		r.matchIndex[r.ID] = logEntry.Index
+		log.Printf("[Raft] Leader %s appended casualty_verified for %s idx=%d term=%d",
+			r.ID, entry.ID, logEntry.Index, logEntry.Term)
+	}
+}
+
+func (r *Robot) hasCasualtyVerificationLogLocked(casualtyID LandmarkID) bool {
+	for _, entry := range r.raftLog {
+		if entry.Type != "casualty_verified" {
+			continue
+		}
+
+		var casualty LandmarkEntry
+		if err := json.Unmarshal(entry.Payload, &casualty); err != nil {
+			continue
+		}
+		if casualty.ID == casualtyID {
+			return true
 		}
 	}
 
-	for {
-		select {
-		case entry := <-r.casualtyVerifiedCh:
-			payload, err := json.Marshal(entry)
-			if err != nil {
-				log.Printf("[Raft] failed to marshal casualty_verified payload: %v", err)
-				continue
-			}
-			logEntry := RaftLogEntry{
-				Term:            r.raftTerm,
-				Index:           int64(len(r.raftLog)),
-				Type:            "casualty_verified",
-				Payload:         payload,
-				TimestampUnixMs: now.UnixMilli(),
-			}
-			r.raftLog = append(r.raftLog, logEntry)
-			r.matchIndex[r.ID] = logEntry.Index
-			log.Printf("[Raft] Leader %s appended casualty_verified for %s idx=%d term=%d",
-				r.ID, entry.ID, logEntry.Index, logEntry.Term)
-		default:
-			return
-		}
-	}
+	return false
 }
 
 // applyCommittedEntriesLocked applies newly committed log entries exactly once.
