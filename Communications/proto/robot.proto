@@ -13,6 +13,8 @@ service RobotService {
   rpc GetNetworkData(NetworkRequest) returns (NetworkResponse);
   // robot sends a heartbeat to the world to indicate that it is still alive.
   rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    // robot informs the world that a casualty has been verified
+  rpc VerifyCasualty(VerifyCasualtyRequest) returns (VerifyCasualtyResponse);
 }
 
 message MoveRequest {
@@ -74,6 +76,15 @@ message HeartbeatResponse {
   double x = 2;
   double y = 3;
   double heading = 4;
+}
+
+message VerifyCasualtyRequest {
+  string robot_id = 1;
+  string landmark_id = 2;
+}
+
+message VerifyCasualtyResponse {
+  bool success = 1;
 }
 
 // PeerService is hosted by the robots to communicate heavily constrained data with neighbors

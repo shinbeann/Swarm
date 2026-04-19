@@ -14,6 +14,14 @@ const (
     LandmarkObstacle LandmarkType = "obstacle"
 )
 
+type LandmarkStatus string
+
+const (
+	LandmarkStatusActive   LandmarkStatus = "active"
+	LandmarkStatusVerified LandmarkStatus = "verified"
+	LandmarkStatusResolved LandmarkStatus = "resolved"
+)
+
 // Location represents a 2D coordinate
 type Location struct {
     X float64
@@ -27,6 +35,7 @@ type RobotID string
 type LandmarkEntry struct {
     ID        LandmarkID
     Type      LandmarkType
+    Status    LandmarkStatus
     Location  Location
     Reporters map[RobotID]int // robot ID -> Lamport timestamp
     FirstSeen time.Time

@@ -84,7 +84,10 @@ func (ge *GossipEngine) gossipOnce() {
 func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
 	ge.robot.Clock.Update(msg.Timestamp)
 	for _, entry := range msg.Entries {
-		ge.robot.store.Add(entry.ID, entry.Type, entry.Location, msg.SenderID, msg.Timestamp)
+		verified, id := ge.robot.store.Add(entry.ID, entry.Type, entry.Location, msg.SenderID, msg.Timestamp)
+		if verified {
+			ge.robot.reportCasualtyVerified(id)
+		}
 	}
 
 	// Record sender as a direct 1-hop neighbour in the routing table.
@@ -98,6 +101,9 @@ func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
 
 func (ge *GossipEngine) RecordDiscovery(id LandmarkID, ltype LandmarkType, loc Location) {
 	timestamp := ge.robot.Clock.Tick()
-	ge.robot.store.Add(id, ltype, loc, RobotID(ge.robot.ID), timestamp)
+	verified, verifiedID := ge.robot.store.Add(id, ltype, loc, RobotID(ge.robot.ID), timestamp)
+	if verified {
+		ge.robot.reportCasualtyVerified(verifiedID)
+	}
 	log.Printf("[discovery] %s found landmark %s at (%.1f, %.1f)", ge.robot.ID, id, loc.X, loc.Y)
 }

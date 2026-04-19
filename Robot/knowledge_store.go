@@ -21,7 +21,7 @@ func NewKnowledgeStore() *KnowledgeStore {
 	return &KnowledgeStore{entries: make(map[LandmarkID]*LandmarkEntry)}
 }
 
-func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, reporter RobotID, timestamp int) bool {
+func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, reporter RobotID, timestamp int) (bool, LandmarkID) {
     ks.mu.Lock()
     defer ks.mu.Unlock()
 
@@ -57,9 +57,9 @@ func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, r
     if !entry.Verified && len(entry.Reporters) >= VerificationQuorum {
         entry.Verified = true
         log.Printf("[KS] casualty %s VERIFIED — %d reporters reached quorum", id, len(entry.Reporters))
-        return true
+        return true, id
     }
-    return false
+    return false, ""
 }
 
 func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {

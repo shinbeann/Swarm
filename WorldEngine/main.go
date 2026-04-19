@@ -39,6 +39,7 @@ const (
 type WorldLandmark struct {
 	ID       LandmarkID
 	Type     LandmarkType
+	Status   LandmarkStatus
 	Location Location
 }
 
@@ -109,14 +110,57 @@ func (s *server) spawnLandmarks() {
 	}
 
 	for _, f := range fixed {
+		status := LandmarkStatusActive
+		if f.t != LandmarkCasualty {
+			// Non-casualty landmarks can just stay "active"
+			status = LandmarkStatusActive
+		}
+
 		s.landmarks[f.id] = &WorldLandmark{
-			ID:   f.id,
-			Type: f.t,
+			ID:       f.id,
+			Type:     f.t,
+			Status:   status,
 			Location: Location{X: f.x, Y: f.y},
 		}
 	}
 
 	log.Printf("[world] spawned %d landmarks", len(s.landmarks))
+}
+
+func (s *server) markCasualtyResolved(id LandmarkID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	lm, exists := s.landmarks[id]
+	if !exists {
+		return false
+	}
+	if lm.Type != LandmarkCasualty {
+		return false
+	}
+
+	lm.Status = LandmarkStatusResolved
+	log.Printf("[world] casualty %s marked as resolved", id)
+	return true
+}
+
+func (s *server) markCasualtyVerified(id LandmarkID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	lm, exists := s.landmarks[id]
+	if !exists {
+		return false
+	}
+	if lm.Type != LandmarkCasualty {
+		return false
+	}
+
+	if lm.Status == LandmarkStatusActive {
+		lm.Status = LandmarkStatusVerified
+		log.Printf("[world] casualty %s marked as verified", id)
+	}
+	return true
 }
 
 // -------------------------------------------------------------------------
@@ -209,12 +253,13 @@ func (s *server) GetSensorData(ctx context.Context, req *pb.SensorRequest) (*pb.
 		dist := math.Sqrt(distX*distX + distY*distY)
 
 		if dist <= discoveryRadius {
-			// Return landmark as ObjectData with type indicating landmark
+			// Include status in the type string so robots / visualiser logic
+			// can distinguish active vs verified vs resolved without protobuf changes.
 			detected = append(detected, &pb.ObjectData{
 				Id:   string(id),
 				X:    landmark.Location.X,
 				Y:    landmark.Location.Y,
-				Type: "landmark:" + string(landmark.Type),
+				Type: "landmark:" + string(landmark.Type) + ":" + string(landmark.Status),
 			})
 		}
 	}
@@ -303,6 +348,14 @@ func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) 
 	return peers
 }
 
+func (s *server) VerifyCasualty(ctx context.Context, req *pb.VerifyCasualtyRequest) (*pb.VerifyCasualtyResponse, error) {
+	ok := s.markCasualtyVerified(LandmarkID(req.GetLandmarkId()))
+	if ok {
+		log.Printf("[world] robot %s verified casualty %s", req.GetRobotId(), req.GetLandmarkId())
+	}
+	return &pb.VerifyCasualtyResponse{Success: ok}, nil
+}
+
 // -------------------------------------------------------------------------
 // VisualiserService handlers
 // -------------------------------------------------------------------------
@@ -315,7 +368,7 @@ func (s *server) GetEnvironmentData(ctx context.Context, req *pb.EnvironmentRequ
 	// payload can carry them without protobuf changes.
 	for _, lm := range s.landmarks {
 		obstacles = append(obstacles, &pb.Obstacle{
-			Id:     "landmark:" + string(lm.ID) + ":" + string(lm.Type),
+			Id:     "landmark:" + string(lm.ID) + ":" + string(lm.Type) + ":" + string(lm.Status),
 			X:      lm.Location.X - 4,
 			Y:      lm.Location.Y - 4,
 			Width:  8,

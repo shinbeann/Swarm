@@ -127,6 +127,23 @@ func (r *Robot) Stop() {
 	}
 }
 
+func (r *Robot) reportCasualtyVerified(id LandmarkID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	resp, err := r.Client.VerifyCasualty(ctx, &pb.VerifyCasualtyRequest{
+		RobotId:    r.ID,
+		LandmarkId: string(id),
+	})
+	if err != nil {
+		log.Printf("[robot %s] failed to report verified casualty %s: %v", r.ID, id, err)
+		return
+	}
+	if resp.GetSuccess() {
+		log.Printf("[robot %s] reported casualty %s as VERIFIED to world", r.ID, id)
+	}
+}
+
 func (r *Robot) Run(ctx context.Context) {
 	heartbeatTicker := time.NewTicker(30 * time.Millisecond)
 	moveTicker := time.NewTicker(2 * time.Second)
