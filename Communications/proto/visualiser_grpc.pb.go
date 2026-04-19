@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0--rc2
-// source: proto/visualiser.proto
+// source: visualiser.proto
 
 package communications
 
@@ -23,7 +23,7 @@ const (
 	VisualiserService_GetRobotData_FullMethodName       = "/swarm.VisualiserService/GetRobotData"
 	VisualiserService_SetSimulationPause_FullMethodName = "/swarm.VisualiserService/SetSimulationPause"
 	VisualiserService_GetLeaderLog_FullMethodName       = "/swarm.VisualiserService/GetLeaderLog"
-	VisualiserService_KillRandomRobot_FullMethodName    = "/swarm.VisualiserService/KillRandomRobot"
+	VisualiserService_Kill_FullMethodName               = "/swarm.VisualiserService/Kill"
 )
 
 // VisualiserServiceClient is the client API for VisualiserService service.
@@ -38,8 +38,8 @@ type VisualiserServiceClient interface {
 	SetSimulationPause(ctx context.Context, in *SimulationPauseRequest, opts ...grpc.CallOption) (*SimulationPauseResponse, error)
 	// visualiser requests the latest leader raft log snapshot.
 	GetLeaderLog(ctx context.Context, in *LeaderLogRequest, opts ...grpc.CallOption) (*LeaderLogResponse, error)
-	// visualiser removes a random robot from the simulation and signals it to shut down.
-	KillRandomRobot(ctx context.Context, in *KillRandomRobotRequest, opts ...grpc.CallOption) (*KillRandomRobotResponse, error)
+	// visualiser removes a robot from the simulation and signals it to shut down.
+	Kill(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (*KillResponse, error)
 }
 
 type visualiserServiceClient struct {
@@ -90,10 +90,10 @@ func (c *visualiserServiceClient) GetLeaderLog(ctx context.Context, in *LeaderLo
 	return out, nil
 }
 
-func (c *visualiserServiceClient) KillRandomRobot(ctx context.Context, in *KillRandomRobotRequest, opts ...grpc.CallOption) (*KillRandomRobotResponse, error) {
+func (c *visualiserServiceClient) Kill(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (*KillResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(KillRandomRobotResponse)
-	err := c.cc.Invoke(ctx, VisualiserService_KillRandomRobot_FullMethodName, in, out, cOpts...)
+	out := new(KillResponse)
+	err := c.cc.Invoke(ctx, VisualiserService_Kill_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +112,8 @@ type VisualiserServiceServer interface {
 	SetSimulationPause(context.Context, *SimulationPauseRequest) (*SimulationPauseResponse, error)
 	// visualiser requests the latest leader raft log snapshot.
 	GetLeaderLog(context.Context, *LeaderLogRequest) (*LeaderLogResponse, error)
-	// visualiser removes a random robot from the simulation and signals it to shut down.
-	KillRandomRobot(context.Context, *KillRandomRobotRequest) (*KillRandomRobotResponse, error)
+	// visualiser removes a robot from the simulation and signals it to shut down.
+	Kill(context.Context, *KillRequest) (*KillResponse, error)
 	mustEmbedUnimplementedVisualiserServiceServer()
 }
 
@@ -136,8 +136,8 @@ func (UnimplementedVisualiserServiceServer) SetSimulationPause(context.Context, 
 func (UnimplementedVisualiserServiceServer) GetLeaderLog(context.Context, *LeaderLogRequest) (*LeaderLogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLeaderLog not implemented")
 }
-func (UnimplementedVisualiserServiceServer) KillRandomRobot(context.Context, *KillRandomRobotRequest) (*KillRandomRobotResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method KillRandomRobot not implemented")
+func (UnimplementedVisualiserServiceServer) Kill(context.Context, *KillRequest) (*KillResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Kill not implemented")
 }
 func (UnimplementedVisualiserServiceServer) mustEmbedUnimplementedVisualiserServiceServer() {}
 func (UnimplementedVisualiserServiceServer) testEmbeddedByValue()                           {}
@@ -232,20 +232,20 @@ func _VisualiserService_GetLeaderLog_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _VisualiserService_KillRandomRobot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(KillRandomRobotRequest)
+func _VisualiserService_Kill_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KillRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(VisualiserServiceServer).KillRandomRobot(ctx, in)
+		return srv.(VisualiserServiceServer).Kill(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: VisualiserService_KillRandomRobot_FullMethodName,
+		FullMethod: VisualiserService_Kill_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VisualiserServiceServer).KillRandomRobot(ctx, req.(*KillRandomRobotRequest))
+		return srv.(VisualiserServiceServer).Kill(ctx, req.(*KillRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -274,10 +274,10 @@ var VisualiserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _VisualiserService_GetLeaderLog_Handler,
 		},
 		{
-			MethodName: "KillRandomRobot",
-			Handler:    _VisualiserService_KillRandomRobot_Handler,
+			MethodName: "Kill",
+			Handler:    _VisualiserService_Kill_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/visualiser.proto",
+	Metadata: "visualiser.proto",
 }

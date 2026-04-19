@@ -161,6 +161,7 @@ function App() {
     const [killPending, setKillPending] = useState(false);
     const [killError, setKillError] = useState<string | null>(null);
     const [lastKilledId, setLastKilledId] = useState<string | null>(null);
+    const [killTargetId, setKillTargetId] = useState('');
 
     // Initialize PixiJS
     useEffect(() => {
@@ -233,7 +234,7 @@ function App() {
                     }
                 }
 
-                if (data.control?.type === 'kill_random_robot') {
+                if (data.control?.type === 'kill') {
                     setKillPending(false);
                     if (data.control.ok) {
                         setKillError(null);
@@ -290,7 +291,7 @@ function App() {
         }
     };
 
-    const killRandomRobot = () => {
+    const killRobot = () => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN || killPending || robotCount === 0) return;
 
@@ -299,7 +300,26 @@ function App() {
         setLastKilledId(null);
 
         try {
-            ws.send(JSON.stringify({ type: 'kill_random_robot' }));
+            ws.send(JSON.stringify({ type: 'kill' }));
+        } catch (error) {
+            setKillPending(false);
+            setKillError('Failed to send kill command');
+            console.error('Error sending kill command', error);
+        }
+    };
+
+    const killRobotById = () => {
+        const ws = wsRef.current;
+        const robotId = killTargetId.trim();
+
+        if (!ws || ws.readyState !== WebSocket.OPEN || killPending || robotId.length !== 5) return;
+
+        setKillPending(true);
+        setKillError(null);
+        setLastKilledId(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'kill', robot_id: robotId }));
         } catch (error) {
             setKillPending(false);
             setKillError('Failed to send kill command');
@@ -557,7 +577,7 @@ function App() {
                             role="tab"
                             aria-selected={isRobotKillerTabActive}
                         >
-                            Robot Killer
+                            Kill
                         </button>
                         <button
                             type="button"
@@ -620,14 +640,37 @@ function App() {
                         {isRobotKillerTabActive && (
                             <section className="tool-panel">
                                 <div className="kill-robot-section">
-                                    <button
-                                        type="button"
-                                        className="kill-random-button"
-                                        onClick={killRandomRobot}
-                                        disabled={!connected || killPending || robotCount === 0}
-                                    >
-                                        {killPending ? 'Killing…' : 'Kill robot'}
-                                    </button>
+                                    <div className="kill-action-row">
+                                        <button
+                                            type="button"
+                                            className="kill-random-button"
+                                            onClick={killRobot}
+                                            disabled={!connected || killPending || robotCount === 0}
+                                        >
+                                            {killPending ? 'Killing…' : 'Kill Random'}
+                                        </button>
+                                    </div>
+                                    <div className="kill-action-row">
+                                        <input
+                                            type="text"
+                                            className="kill-id-input"
+                                            value={killTargetId}
+                                            onChange={(event) => setKillTargetId(event.target.value.slice(0, 5))}
+                                            placeholder="Robot ID"
+                                            maxLength={5}
+                                            inputMode="text"
+                                            autoComplete="off"
+                                            aria-label="Robot ID prefix to kill"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="kill-target-button"
+                                            onClick={killRobotById}
+                                            disabled={!connected || killPending || killTargetId.trim().length !== 5}
+                                        >
+                                            Kill
+                                        </button>
+                                    </div>
                                     {lastKilledId && (
                                         <div className="kill-robot-feedback" role="status">
                                             Removed <span className="mono">{lastKilledId}</span> from simulation

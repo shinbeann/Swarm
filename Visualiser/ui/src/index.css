@@ -295,7 +295,34 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.kill-action-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.kill-id-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 10, 16, 0.65);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.kill-id-input:focus {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(10, 10, 16, 0.82);
+}
+
 .kill-random-button {
+  flex: 1;
   border: 1px solid rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
@@ -312,6 +339,28 @@ body {
 }
 
 .kill-random-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kill-target-button {
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  background: rgba(0, 255, 136, 0.12);
+  color: #dcffe9;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.kill-target-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(0, 255, 136, 0.18);
+  border-color: rgba(0, 255, 136, 0.44);
+}
+
+.kill-target-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

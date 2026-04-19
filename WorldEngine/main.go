@@ -447,22 +447,32 @@ func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*p
 	return &pb.RobotDataResponse{Robots: rbts}, nil
 }
 
-func (s *server) KillRandomRobot(ctx context.Context, req *pb.KillRandomRobotRequest) (*pb.KillRandomRobotResponse, error) {
+func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*pb.KillResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.robots) == 0 {
-		return &pb.KillRandomRobotResponse{
-			Success: false,
-			Error:   "no robots in simulation",
-		}, nil
-	}
+	victim := req.GetRobotId()
+	if victim != "" {
+		if _, exists := s.robots[victim]; !exists {
+			return &pb.KillResponse{
+				Success: false,
+				Error:   "robot not found",
+			}, nil
+		}
+	} else {
+		if len(s.robots) == 0 {
+			return &pb.KillResponse{
+				Success: false,
+				Error:   "no robots in simulation",
+			}, nil
+		}
 
-	ids := make([]string, 0, len(s.robots))
-	for id := range s.robots {
-		ids = append(ids, id)
+		ids := make([]string, 0, len(s.robots))
+		for id := range s.robots {
+			ids = append(ids, id)
+		}
+		victim = ids[rand.Intn(len(ids))]
 	}
-	victim := ids[rand.Intn(len(ids))]
 
 	delete(s.robots, victim)
 	delete(s.leaderLogSnapshots, victim)
@@ -471,7 +481,7 @@ func (s *server) KillRandomRobot(ctx context.Context, req *pb.KillRandomRobotReq
 
 	log.Printf("[world] kill requested: removed robot %s from simulation", victim)
 
-	return &pb.KillRandomRobotResponse{
+	return &pb.KillResponse{
 		Success:       true,
 		KilledRobotId: victim,
 	}, nil
@@ -578,7 +588,7 @@ func main() {
 	grpcServer.GracefulStop()
 }
 
-// Implement visualiser RPC to serve raft log snapshots to the Visualiser UI for display on the timeline. 
+// Implement visualiser RPC to serve raft log snapshots to the Visualiser UI for display on the timeline.
 func (s *server) GetLeaderLog(ctx context.Context, req *pb.LeaderLogRequest) (*pb.LeaderLogResponse, error) {
 	s.mu.RLock()
 	leaderID := s.resolveLeaderIDLocked()

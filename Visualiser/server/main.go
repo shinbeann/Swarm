@@ -26,8 +26,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type wsControlMessage struct {
-	Type  string `json:"type"`
-	Pause *bool  `json:"pause,omitempty"`
+	Type    string `json:"type"`
+	Pause   *bool  `json:"pause,omitempty"`
+	RobotID string `json:"robot_id,omitempty"`
 }
 
 type wsLeaderLogEntry struct {
@@ -125,6 +126,24 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 
 	controlCh := make(chan wsControlMessage)
 	readErrCh := make(chan error, 1)
+	latestRobotIDs := make([]string, 0)
+
+	resolveRobotID := func(prefix string) (string, error) {
+		matches := make([]string, 0, 1)
+		for _, id := range latestRobotIDs {
+			if strings.HasPrefix(id, prefix) {
+				matches = append(matches, id)
+			}
+		}
+
+		if len(matches) == 0 {
+			return "", errors.New("no robot matches the provided id")
+		}
+		if len(matches) > 1 {
+			return "", errors.New("robot id prefix is ambiguous")
+		}
+		return matches[0], nil
+	}
 
 	go func() {
 		for {
@@ -172,14 +191,32 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 					return
 				}
 
-			case "kill_random_robot":
-				killResp, err := client.KillRandomRobot(context.Background(), &pb.KillRandomRobotRequest{})
+			case "kill":
+				killReq := &pb.KillRequest{}
+				if robotID := strings.TrimSpace(msg.RobotID); robotID != "" {
+					resolvedRobotID, resolveErr := resolveRobotID(robotID)
+					if resolveErr != nil {
+						controlPayload := map[string]interface{}{
+							"type":  "kill",
+							"ok":    false,
+							"error": resolveErr.Error(),
+						}
+						if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+							log.Printf("Error writing control ack to websocket: %v", err)
+							return
+						}
+						continue
+					}
+					killReq.RobotId = resolvedRobotID
+				}
+
+				killResp, err := client.Kill(context.Background(), killReq)
 				controlPayload := map[string]interface{}{
-					"type": "kill_random_robot",
+					"type": "kill",
 					"ok":   err == nil && killResp != nil && killResp.GetSuccess(),
 				}
 				if err != nil {
-					log.Printf("Error killing random robot: %v", err)
+					log.Printf("Error killing robot: %v", err)
 					controlPayload["error"] = err.Error()
 				} else if killResp != nil && !killResp.GetSuccess() {
 					controlPayload["error"] = killResp.GetError()
@@ -208,6 +245,10 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 			if err != nil {
 				log.Printf("Error fetching robot data: %v", err)
 				continue
+			}
+			latestRobotIDs = latestRobotIDs[:0]
+			for _, robot := range robResp.GetRobots() {
+				latestRobotIDs = append(latestRobotIDs, robot.GetId())
 			}
 
 			leaderLogResp, err := client.GetLeaderLog(context.Background(), &pb.LeaderLogRequest{})
