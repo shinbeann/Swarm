@@ -13,6 +13,7 @@ interface Robot {
     raft_term?: number;
     raft_log_index?: number;
     commit_index?: number;
+    verified_casualty_ids?: string[];
 }
 
 interface Obstacle {
@@ -66,6 +67,9 @@ interface StatePayload {
 
 const LANDMARK_PREFIX = 'landmark:';
 const SENSOR_RANGE = 100;
+const CASUALTY_COLOR_UNVERIFIED = 0x00e5ff;
+const CASUALTY_COLOR_VERIFIED = 0xffd84d;
+const CASUALTY_COLOR_COMMITTED = 0x5dff72;
 
 const hslToHexColor = (h: number, s: number, l: number): number => {
     const sat = s / 100;
@@ -143,6 +147,42 @@ const drawDottedEllipse = (
 
 const isLeaderPingEntry = (entry: LeaderLogEntry): boolean => entry.message.startsWith('leader-ping:');
 
+const isCasualtyVerificationEntry = (entry: LeaderLogEntry): boolean => {
+    return entry.message.length > 0 && !isLeaderPingEntry(entry);
+};
+
+const casualtyIdFromLandmarkId = (landmarkId: string): string | null => {
+    if (!landmarkId.startsWith(LANDMARK_PREFIX)) {
+        return null;
+    }
+
+    const remainder = landmarkId.slice(LANDMARK_PREFIX.length);
+    const separatorIndex = remainder.lastIndexOf(':');
+    if (separatorIndex <= 0) {
+        return null;
+    }
+
+    return remainder.slice(0, separatorIndex);
+};
+
+const verifiedCasualtyIdsFromRobots = (robots: Robot[]): Set<string> => {
+    const verifiedIds = new Set<string>();
+
+    robots.forEach((robot) => {
+        (robot.verified_casualty_ids ?? []).forEach((casualtyId) => {
+            verifiedIds.add(casualtyId);
+        });
+    });
+
+    return verifiedIds;
+};
+
+const casualtyIdIsCommitted = (casualtyId: string, leaderLogData: LeaderLogData): boolean => {
+    return (leaderLogData.entries ?? []).some((entry) => {
+        return isCasualtyVerificationEntry(entry) && entry.message === casualtyId && entry.status === 2;
+    });
+};
+
 const hasSameIDs = (left: string[], right: string[]): boolean => {
     if (left.length !== right.length) return false;
     for (let i = 0; i < left.length; i++) {
@@ -163,6 +203,7 @@ function App() {
 
     const [env, setEnv] = useState<Environment>({ width: 1000, height: 1000, obstacles: [] });
     const [leaderLog, setLeaderLog] = useState<LeaderLogData>({ current_leader: '', current_term: 0, entries: [] });
+    const [robots, setRobots] = useState<Robot[]>([]);
     const [hideLeaderPings, setHideLeaderPings] = useState(true);
     const [activeTool, setActiveTool] = useState<'leader-log' | 'robot-killer' | 'partioning'>('leader-log');
     const [connected, setConnected] = useState(false);
@@ -282,6 +323,7 @@ function App() {
                     }
                 }
                 if (data.robots && appRef.current) {
+                    setRobots(data.robots);
                     setRobotCount(data.robots.length);
                     updateRobots(data.robots, appRef.current);
                     updateCommunicationOverlay(data.robots);
@@ -330,6 +372,12 @@ function App() {
             return changed ? next : previous;
         });
     }, [knownRobotIDs]);
+
+    useEffect(() => {
+        if (appRef.current && envGraphicsRef.current) {
+            updateEnvironment(env, envGraphicsRef.current);
+        }
+    }, [env, leaderLog, robots]);
 
     const togglePause = () => {
         const ws = wsRef.current;
@@ -433,6 +481,7 @@ function App() {
         if (environment.obstacles) {
             const staticObstacles = environment.obstacles.filter((obs) => !obs.id.startsWith(LANDMARK_PREFIX));
             const landmarks = environment.obstacles.filter((obs) => obs.id.startsWith(LANDMARK_PREFIX));
+            const verifiedCasualtyIds = verifiedCasualtyIdsFromRobots(robots);
 
             graphics.fill(0xff3366, 0.5); // Walls/obstacles
             staticObstacles.forEach((obs) => {
@@ -449,10 +498,19 @@ function App() {
             landmarks.forEach((lm) => {
                 const cx = (lm.x + lm.width / 2) * scaleX;
                 const cy = (lm.y + lm.height / 2) * scaleY;
-                const radius = Math.max(4, (lm.width * scaleX) / 2);
+                const radius = Math.max(8, (lm.width * scaleX) / 2);
 
                 let color = 0xffcc00; // default landmark color
-                if (lm.id.includes(':casualty')) color = 0x00e5ff;
+                if (lm.id.includes(':casualty')) {
+                    const casualtyId = casualtyIdFromLandmarkId(lm.id);
+                    if (casualtyId && casualtyIdIsCommitted(casualtyId, leaderLog)) {
+                        color = CASUALTY_COLOR_COMMITTED;
+                    } else if (casualtyId && verifiedCasualtyIds.has(casualtyId)) {
+                        color = CASUALTY_COLOR_VERIFIED;
+                    } else {
+                        color = CASUALTY_COLOR_UNVERIFIED;
+                    }
+                }
                 if (lm.id.includes(':corridor')) color = 0x7dff6d;
                 if (lm.id.includes(':obstacle')) color = 0xffa347;
 

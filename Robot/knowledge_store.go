@@ -101,6 +101,22 @@ func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
 	return result
 }
 
+// VerifiedCasualtyIDs returns casualty ids that have reached local verification quorum.
+func (ks *KnowledgeStore) VerifiedCasualtyIDs() []string {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	result := make([]string, 0)
+	for _, entry := range ks.entries {
+		if entry.Type != LandmarkCasualty || !entry.Verified {
+			continue
+		}
+		result = append(result, string(entry.ID))
+	}
+
+	return result
+}
+
 // PendingCasualtyVerifications returns casualty entries that have reached quorum
 // but have not yet been committed by a Raft entry.
 func (ks *KnowledgeStore) PendingCasualtyVerifications() []*LandmarkEntry {

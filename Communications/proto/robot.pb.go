@@ -463,12 +463,13 @@ type HeartbeatRequest struct {
 	Heading float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
 	// Leader ID this robot currently believes is authoritative.
 	// Empty when no leader is currently known.
-	KnownLeaderId string `protobuf:"bytes,5,opt,name=known_leader_id,json=knownLeaderId,proto3" json:"known_leader_id,omitempty"`
-	CurrentTerm   int64  `protobuf:"varint,6,opt,name=current_term,json=currentTerm,proto3" json:"current_term,omitempty"`
-	LastLogIndex  int64  `protobuf:"varint,7,opt,name=last_log_index,json=lastLogIndex,proto3" json:"last_log_index,omitempty"`
-	CommitIndex   int64  `protobuf:"varint,8,opt,name=commit_index,json=commitIndex,proto3" json:"commit_index,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	KnownLeaderId       string   `protobuf:"bytes,5,opt,name=known_leader_id,json=knownLeaderId,proto3" json:"known_leader_id,omitempty"`
+	CurrentTerm         int64    `protobuf:"varint,6,opt,name=current_term,json=currentTerm,proto3" json:"current_term,omitempty"`
+	LastLogIndex        int64    `protobuf:"varint,7,opt,name=last_log_index,json=lastLogIndex,proto3" json:"last_log_index,omitempty"`
+	CommitIndex         int64    `protobuf:"varint,8,opt,name=commit_index,json=commitIndex,proto3" json:"commit_index,omitempty"`
+	VerifiedCasualtyIds []string `protobuf:"bytes,9,rep,name=verified_casualty_ids,json=verifiedCasualtyIds,proto3" json:"verified_casualty_ids,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *HeartbeatRequest) Reset() {
@@ -555,6 +556,13 @@ func (x *HeartbeatRequest) GetCommitIndex() int64 {
 		return x.CommitIndex
 	}
 	return 0
+}
+
+func (x *HeartbeatRequest) GetVerifiedCasualtyIds() []string {
+	if x != nil {
+		return x.VerifiedCasualtyIds
+	}
+	return nil
 }
 
 type HeartbeatResponse struct {
@@ -1401,7 +1409,7 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\vreliability\x18\x04 \x01(\x01R\vreliability\"\x81\x01\n" +
 	"\x0fNetworkResponse\x12A\n" +
 	"\x12network_conditions\x18\x01 \x03(\v2\x12.swarm.NetworkDataR\x11networkConditions\x12+\n" +
-	"\x11simulation_paused\x18\x02 \x01(\bR\x10simulationPaused\"\xf7\x01\n" +
+	"\x11simulation_paused\x18\x02 \x01(\bR\x10simulationPaused\"\xab\x02\n" +
 	"\x10HeartbeatRequest\x12\x19\n" +
 	"\brobot_id\x18\x01 \x01(\tR\arobotId\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
@@ -1410,7 +1418,8 @@ const file_proto_robot_proto_rawDesc = "" +
 	"\x0fknown_leader_id\x18\x05 \x01(\tR\rknownLeaderId\x12!\n" +
 	"\fcurrent_term\x18\x06 \x01(\x03R\vcurrentTerm\x12$\n" +
 	"\x0elast_log_index\x18\a \x01(\x03R\flastLogIndex\x12!\n" +
-	"\fcommit_index\x18\b \x01(\x03R\vcommitIndex\"c\n" +
+	"\fcommit_index\x18\b \x01(\x03R\vcommitIndex\x122\n" +
+	"\x15verified_casualty_ids\x18\t \x03(\tR\x13verifiedCasualtyIds\"c\n" +
 	"\x11HeartbeatResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +

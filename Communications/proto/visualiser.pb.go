@@ -383,19 +383,20 @@ func (*RobotDataRequest) Descriptor() ([]byte, []int) {
 }
 
 type RobotInfo struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	X                  float64                `protobuf:"fixed64,2,opt,name=x,proto3" json:"x,omitempty"`
-	Y                  float64                `protobuf:"fixed64,3,opt,name=y,proto3" json:"y,omitempty"`
-	Heading            float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
-	IsLeader           bool                   `protobuf:"varint,5,opt,name=is_leader,json=isLeader,proto3" json:"is_leader,omitempty"`
-	CommunicationRange float64                `protobuf:"fixed64,6,opt,name=communication_range,json=communicationRange,proto3" json:"communication_range,omitempty"`
-	InRangePeerIds     []string               `protobuf:"bytes,7,rep,name=in_range_peer_ids,json=inRangePeerIds,proto3" json:"in_range_peer_ids,omitempty"`
-	RaftTerm           int64                  `protobuf:"varint,8,opt,name=raft_term,json=raftTerm,proto3" json:"raft_term,omitempty"`
-	RaftLogIndex       int64                  `protobuf:"varint,9,opt,name=raft_log_index,json=raftLogIndex,proto3" json:"raft_log_index,omitempty"`
-	CommitIndex        int64                  `protobuf:"varint,10,opt,name=commit_index,json=commitIndex,proto3" json:"commit_index,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Id                  string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	X                   float64                `protobuf:"fixed64,2,opt,name=x,proto3" json:"x,omitempty"`
+	Y                   float64                `protobuf:"fixed64,3,opt,name=y,proto3" json:"y,omitempty"`
+	Heading             float64                `protobuf:"fixed64,4,opt,name=heading,proto3" json:"heading,omitempty"`
+	IsLeader            bool                   `protobuf:"varint,5,opt,name=is_leader,json=isLeader,proto3" json:"is_leader,omitempty"`
+	CommunicationRange  float64                `protobuf:"fixed64,6,opt,name=communication_range,json=communicationRange,proto3" json:"communication_range,omitempty"`
+	InRangePeerIds      []string               `protobuf:"bytes,7,rep,name=in_range_peer_ids,json=inRangePeerIds,proto3" json:"in_range_peer_ids,omitempty"`
+	RaftTerm            int64                  `protobuf:"varint,8,opt,name=raft_term,json=raftTerm,proto3" json:"raft_term,omitempty"`
+	RaftLogIndex        int64                  `protobuf:"varint,9,opt,name=raft_log_index,json=raftLogIndex,proto3" json:"raft_log_index,omitempty"`
+	CommitIndex         int64                  `protobuf:"varint,10,opt,name=commit_index,json=commitIndex,proto3" json:"commit_index,omitempty"`
+	VerifiedCasualtyIds []string               `protobuf:"bytes,11,rep,name=verified_casualty_ids,json=verifiedCasualtyIds,proto3" json:"verified_casualty_ids,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *RobotInfo) Reset() {
@@ -496,6 +497,13 @@ func (x *RobotInfo) GetCommitIndex() int64 {
 		return x.CommitIndex
 	}
 	return 0
+}
+
+func (x *RobotInfo) GetVerifiedCasualtyIds() []string {
+	if x != nil {
+		return x.VerifiedCasualtyIds
+	}
+	return nil
 }
 
 type RobotDataResponse struct {
@@ -1005,7 +1013,7 @@ const file_proto_visualiser_proto_rawDesc = "" +
 	"\x01y\x18\x03 \x01(\x01R\x01y\x12\x14\n" +
 	"\x05width\x18\x04 \x01(\x01R\x05width\x12\x16\n" +
 	"\x06height\x18\x05 \x01(\x01R\x06height\"\x12\n" +
-	"\x10RobotDataRequest\"\xb0\x02\n" +
+	"\x10RobotDataRequest\"\xe4\x02\n" +
 	"\tRobotInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
@@ -1017,7 +1025,8 @@ const file_proto_visualiser_proto_rawDesc = "" +
 	"\traft_term\x18\b \x01(\x03R\braftTerm\x12$\n" +
 	"\x0eraft_log_index\x18\t \x01(\x03R\fraftLogIndex\x12!\n" +
 	"\fcommit_index\x18\n" +
-	" \x01(\x03R\vcommitIndex\"=\n" +
+	" \x01(\x03R\vcommitIndex\x122\n" +
+	"\x15verified_casualty_ids\x18\v \x03(\tR\x13verifiedCasualtyIds\"=\n" +
 	"\x11RobotDataResponse\x12(\n" +
 	"\x06robots\x18\x01 \x03(\v2\x10.swarm.RobotInfoR\x06robots\"\x12\n" +
 	"\x10LeaderLogRequest\"\xd7\x01\n" +

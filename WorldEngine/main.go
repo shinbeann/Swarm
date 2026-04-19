@@ -117,10 +117,10 @@ func (s *server) spawnLandmarks() {
 		{"casualty-2", LandmarkCasualty, 450, 800},
 		{"casualty-3", LandmarkCasualty, 200, 200},
 		{"casualty-4", LandmarkCasualty, 100, 250},
-		{"corridor-0", LandmarkCorridor, 500, 500},
-		{"corridor-1", LandmarkCorridor, 150, 750},
-		{"obstacle-0", LandmarkObstacle, 300, 500},
-		{"obstacle-1", LandmarkObstacle, 800, 400},
+		// {"corridor-0", LandmarkCorridor, 500, 500},
+		// {"corridor-1", LandmarkCorridor, 150, 750},
+		// {"obstacle-0", LandmarkObstacle, 300, 500},
+		// {"obstacle-1", LandmarkObstacle, 800, 400},
 	}
 
 	for _, f := range fixed {
@@ -150,10 +150,11 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 	if !exists {
 		state = &RobotState{
 			Info: &pb.RobotInfo{
-				Id:      req.GetRobotId(),
-				X:       math.Max(0, math.Min(1000, req.GetX())),
-				Y:       math.Max(0, math.Min(1000, req.GetY())),
-				Heading: req.GetHeading(),
+				Id:                    req.GetRobotId(),
+				X:                     math.Max(0, math.Min(1000, req.GetX())),
+				Y:                     math.Max(0, math.Min(1000, req.GetY())),
+				Heading:               req.GetHeading(),
+				VerifiedCasualtyIds:   append([]string(nil), req.GetVerifiedCasualtyIds()...),
 			},
 		}
 		s.robots[req.GetRobotId()] = state
@@ -168,6 +169,7 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 
 	state.LastSeen = time.Now()
 	state.LastKnownLeaderID = req.GetKnownLeaderId()
+	state.Info.VerifiedCasualtyIds = append(state.Info.VerifiedCasualtyIds[:0], req.GetVerifiedCasualtyIds()...)
 	state.Info.RaftTerm = req.GetCurrentTerm()
 	state.Info.RaftLogIndex = req.GetLastLogIndex()
 	state.Info.CommitIndex = req.GetCommitIndex()
@@ -494,16 +496,17 @@ func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*p
 	for _, id := range sortedRobotIDs {
 		state := s.robots[id]
 		rbts = append(rbts, &pb.RobotInfo{
-			Id:                 state.Info.Id,
-			X:                  state.Info.X,
-			Y:                  state.Info.Y,
-			Heading:            state.Info.Heading,
-			IsLeader:           id == leaderID,
-			CommunicationRange: communicationRange,
-			InRangePeerIds:     s.inRangePeerIDsLocked(id, sortedRobotIDs),
-			RaftTerm:           state.Info.RaftTerm,
-			RaftLogIndex:       state.Info.RaftLogIndex,
-			CommitIndex:        state.Info.CommitIndex,
+			Id:                  state.Info.Id,
+			X:                   state.Info.X,
+			Y:                   state.Info.Y,
+			Heading:             state.Info.Heading,
+			IsLeader:            id == leaderID,
+			CommunicationRange:  communicationRange,
+			InRangePeerIds:      s.inRangePeerIDsLocked(id, sortedRobotIDs),
+			RaftTerm:            state.Info.RaftTerm,
+			RaftLogIndex:        state.Info.RaftLogIndex,
+			CommitIndex:         state.Info.CommitIndex,
+			VerifiedCasualtyIds: append([]string(nil), state.Info.VerifiedCasualtyIds...),
 		})
 	}
 	return &pb.RobotDataResponse{Robots: rbts}, nil

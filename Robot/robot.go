@@ -183,6 +183,7 @@ func (r *Robot) tick(ctx context.Context) {
 	currentTerm := r.raftTerm
 	lastLogIndex := r.lastRaftLogIndexLocked()
 	commitIndex := r.commitIndex
+	verifiedCasualtyIDs := r.store.VerifiedCasualtyIDs()
 	r.mu.Unlock()
 
 	// Heartbeat — WorldEngine returns the canonical position
@@ -195,6 +196,7 @@ func (r *Robot) tick(ctx context.Context) {
 		CurrentTerm:   currentTerm,
 		LastLogIndex:  lastLogIndex,
 		CommitIndex:   commitIndex,
+		VerifiedCasualtyIds: verifiedCasualtyIDs,
 	})
 	if err != nil {
 		log.Printf("worldheartbeat error: %v", err)

@@ -75,6 +75,7 @@ message HeartbeatRequest {
   int64 current_term = 6;
   int64 last_log_index = 7;
   int64 commit_index = 8;
+  repeated string verified_casualty_ids = 9;
 }
 
 message HeartbeatResponse {

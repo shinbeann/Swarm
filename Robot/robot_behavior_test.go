@@ -61,6 +61,15 @@ func findEntry(t *testing.T, store *KnowledgeStore, id LandmarkID) *LandmarkEntr
 	return nil
 }
 
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func gossipRequest(sender string, timestamp int, entries ...*LandmarkEntry) *pb.PeerSyncRequest {
 	msg := &GossipMessage{
 		SenderID:  RobotID(sender),
@@ -120,6 +129,10 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	if entry.Committed {
 		t.Fatalf("expected casualty to remain uncommitted before raft apply")
 	}
+	verifiedIDs := store.VerifiedCasualtyIDs()
+	if !containsString(verifiedIDs, string(id)) {
+		t.Fatalf("expected verified casualty ids to include %s after quorum", id)
+	}
 	if len(entry.Reporters) != 3 {
 		t.Fatalf("expected 3 reporters after third report, got %d", len(entry.Reporters))
 	}
@@ -131,6 +144,10 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 	if !entry.Committed {
 		t.Fatalf("expected casualty to be marked committed after raft apply")
+	}
+	verifiedIDs = store.VerifiedCasualtyIDs()
+	if !containsString(verifiedIDs, string(id)) {
+		t.Fatalf("expected verified casualty ids to continue including %s after commit", id)
 	}
 
 	if verified := store.Add(id, LandmarkCasualty, loc, "r3", 4); verified {
