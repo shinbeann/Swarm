@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.0--rc2
-// source: visualiser.proto
+// source: proto/visualiser.proto
 
 package communications
 
@@ -54,11 +54,11 @@ func (x LeaderLogStatus) String() string {
 }
 
 func (LeaderLogStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_visualiser_proto_enumTypes[0].Descriptor()
+	return file_proto_visualiser_proto_enumTypes[0].Descriptor()
 }
 
 func (LeaderLogStatus) Type() protoreflect.EnumType {
-	return &file_visualiser_proto_enumTypes[0]
+	return &file_proto_visualiser_proto_enumTypes[0]
 }
 
 func (x LeaderLogStatus) Number() protoreflect.EnumNumber {
@@ -67,7 +67,7 @@ func (x LeaderLogStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LeaderLogStatus.Descriptor instead.
 func (LeaderLogStatus) EnumDescriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{0}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{0}
 }
 
 type EnvironmentRequest struct {
@@ -78,7 +78,7 @@ type EnvironmentRequest struct {
 
 func (x *EnvironmentRequest) Reset() {
 	*x = EnvironmentRequest{}
-	mi := &file_visualiser_proto_msgTypes[0]
+	mi := &file_proto_visualiser_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -90,7 +90,7 @@ func (x *EnvironmentRequest) String() string {
 func (*EnvironmentRequest) ProtoMessage() {}
 
 func (x *EnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[0]
+	mi := &file_proto_visualiser_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -103,7 +103,7 @@ func (x *EnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*EnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{0}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{0}
 }
 
 type EnvironmentResponse struct {
@@ -118,7 +118,7 @@ type EnvironmentResponse struct {
 
 func (x *EnvironmentResponse) Reset() {
 	*x = EnvironmentResponse{}
-	mi := &file_visualiser_proto_msgTypes[1]
+	mi := &file_proto_visualiser_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -130,7 +130,7 @@ func (x *EnvironmentResponse) String() string {
 func (*EnvironmentResponse) ProtoMessage() {}
 
 func (x *EnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[1]
+	mi := &file_proto_visualiser_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -143,7 +143,7 @@ func (x *EnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*EnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{1}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *EnvironmentResponse) GetWidth() float64 {
@@ -183,7 +183,7 @@ type SimulationPauseRequest struct {
 
 func (x *SimulationPauseRequest) Reset() {
 	*x = SimulationPauseRequest{}
-	mi := &file_visualiser_proto_msgTypes[2]
+	mi := &file_proto_visualiser_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -195,7 +195,7 @@ func (x *SimulationPauseRequest) String() string {
 func (*SimulationPauseRequest) ProtoMessage() {}
 
 func (x *SimulationPauseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[2]
+	mi := &file_proto_visualiser_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -208,7 +208,7 @@ func (x *SimulationPauseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulationPauseRequest.ProtoReflect.Descriptor instead.
 func (*SimulationPauseRequest) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{2}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SimulationPauseRequest) GetPause() bool {
@@ -228,7 +228,7 @@ type SimulationPauseResponse struct {
 
 func (x *SimulationPauseResponse) Reset() {
 	*x = SimulationPauseResponse{}
-	mi := &file_visualiser_proto_msgTypes[3]
+	mi := &file_proto_visualiser_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -240,7 +240,7 @@ func (x *SimulationPauseResponse) String() string {
 func (*SimulationPauseResponse) ProtoMessage() {}
 
 func (x *SimulationPauseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[3]
+	mi := &file_proto_visualiser_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -253,7 +253,7 @@ func (x *SimulationPauseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulationPauseResponse.ProtoReflect.Descriptor instead.
 func (*SimulationPauseResponse) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{3}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SimulationPauseResponse) GetSuccess() bool {
@@ -283,7 +283,7 @@ type Obstacle struct {
 
 func (x *Obstacle) Reset() {
 	*x = Obstacle{}
-	mi := &file_visualiser_proto_msgTypes[4]
+	mi := &file_proto_visualiser_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -295,7 +295,7 @@ func (x *Obstacle) String() string {
 func (*Obstacle) ProtoMessage() {}
 
 func (x *Obstacle) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[4]
+	mi := &file_proto_visualiser_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -308,7 +308,7 @@ func (x *Obstacle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Obstacle.ProtoReflect.Descriptor instead.
 func (*Obstacle) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{4}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Obstacle) GetId() string {
@@ -354,7 +354,7 @@ type RobotDataRequest struct {
 
 func (x *RobotDataRequest) Reset() {
 	*x = RobotDataRequest{}
-	mi := &file_visualiser_proto_msgTypes[5]
+	mi := &file_proto_visualiser_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -366,7 +366,7 @@ func (x *RobotDataRequest) String() string {
 func (*RobotDataRequest) ProtoMessage() {}
 
 func (x *RobotDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[5]
+	mi := &file_proto_visualiser_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +379,7 @@ func (x *RobotDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RobotDataRequest.ProtoReflect.Descriptor instead.
 func (*RobotDataRequest) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{5}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{5}
 }
 
 type RobotInfo struct {
@@ -400,7 +400,7 @@ type RobotInfo struct {
 
 func (x *RobotInfo) Reset() {
 	*x = RobotInfo{}
-	mi := &file_visualiser_proto_msgTypes[6]
+	mi := &file_proto_visualiser_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -412,7 +412,7 @@ func (x *RobotInfo) String() string {
 func (*RobotInfo) ProtoMessage() {}
 
 func (x *RobotInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[6]
+	mi := &file_proto_visualiser_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -425,7 +425,7 @@ func (x *RobotInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RobotInfo.ProtoReflect.Descriptor instead.
 func (*RobotInfo) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{6}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RobotInfo) GetId() string {
@@ -507,7 +507,7 @@ type RobotDataResponse struct {
 
 func (x *RobotDataResponse) Reset() {
 	*x = RobotDataResponse{}
-	mi := &file_visualiser_proto_msgTypes[7]
+	mi := &file_proto_visualiser_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -519,7 +519,7 @@ func (x *RobotDataResponse) String() string {
 func (*RobotDataResponse) ProtoMessage() {}
 
 func (x *RobotDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[7]
+	mi := &file_proto_visualiser_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -532,7 +532,7 @@ func (x *RobotDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RobotDataResponse.ProtoReflect.Descriptor instead.
 func (*RobotDataResponse) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{7}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RobotDataResponse) GetRobots() []*RobotInfo {
@@ -550,7 +550,7 @@ type LeaderLogRequest struct {
 
 func (x *LeaderLogRequest) Reset() {
 	*x = LeaderLogRequest{}
-	mi := &file_visualiser_proto_msgTypes[8]
+	mi := &file_proto_visualiser_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -562,7 +562,7 @@ func (x *LeaderLogRequest) String() string {
 func (*LeaderLogRequest) ProtoMessage() {}
 
 func (x *LeaderLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[8]
+	mi := &file_proto_visualiser_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -575,7 +575,7 @@ func (x *LeaderLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaderLogRequest.ProtoReflect.Descriptor instead.
 func (*LeaderLogRequest) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{8}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{8}
 }
 
 type LeaderLogEntry struct {
@@ -592,7 +592,7 @@ type LeaderLogEntry struct {
 
 func (x *LeaderLogEntry) Reset() {
 	*x = LeaderLogEntry{}
-	mi := &file_visualiser_proto_msgTypes[9]
+	mi := &file_proto_visualiser_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -604,7 +604,7 @@ func (x *LeaderLogEntry) String() string {
 func (*LeaderLogEntry) ProtoMessage() {}
 
 func (x *LeaderLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[9]
+	mi := &file_proto_visualiser_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -617,7 +617,7 @@ func (x *LeaderLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaderLogEntry.ProtoReflect.Descriptor instead.
 func (*LeaderLogEntry) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{9}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LeaderLogEntry) GetCurrentLeader() string {
@@ -673,7 +673,7 @@ type LeaderLogResponse struct {
 
 func (x *LeaderLogResponse) Reset() {
 	*x = LeaderLogResponse{}
-	mi := &file_visualiser_proto_msgTypes[10]
+	mi := &file_proto_visualiser_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +685,7 @@ func (x *LeaderLogResponse) String() string {
 func (*LeaderLogResponse) ProtoMessage() {}
 
 func (x *LeaderLogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[10]
+	mi := &file_proto_visualiser_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,7 +698,7 @@ func (x *LeaderLogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaderLogResponse.ProtoReflect.Descriptor instead.
 func (*LeaderLogResponse) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{10}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *LeaderLogResponse) GetCurrentLeader() string {
@@ -732,7 +732,7 @@ type KillRequest struct {
 
 func (x *KillRequest) Reset() {
 	*x = KillRequest{}
-	mi := &file_visualiser_proto_msgTypes[11]
+	mi := &file_proto_visualiser_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -744,7 +744,7 @@ func (x *KillRequest) String() string {
 func (*KillRequest) ProtoMessage() {}
 
 func (x *KillRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[11]
+	mi := &file_proto_visualiser_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -757,7 +757,7 @@ func (x *KillRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillRequest.ProtoReflect.Descriptor instead.
 func (*KillRequest) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{11}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *KillRequest) GetRobotId() string {
@@ -778,7 +778,7 @@ type KillResponse struct {
 
 func (x *KillResponse) Reset() {
 	*x = KillResponse{}
-	mi := &file_visualiser_proto_msgTypes[12]
+	mi := &file_proto_visualiser_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +790,7 @@ func (x *KillResponse) String() string {
 func (*KillResponse) ProtoMessage() {}
 
 func (x *KillResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_visualiser_proto_msgTypes[12]
+	mi := &file_proto_visualiser_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +803,7 @@ func (x *KillResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillResponse.ProtoReflect.Descriptor instead.
 func (*KillResponse) Descriptor() ([]byte, []int) {
-	return file_visualiser_proto_rawDescGZIP(), []int{12}
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *KillResponse) GetSuccess() bool {
@@ -827,11 +827,167 @@ func (x *KillResponse) GetError() string {
 	return ""
 }
 
-var File_visualiser_proto protoreflect.FileDescriptor
+type PartitionAssignment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RobotId       string                 `protobuf:"bytes,1,opt,name=robot_id,json=robotId,proto3" json:"robot_id,omitempty"`
+	GroupIndex    uint32                 `protobuf:"varint,2,opt,name=group_index,json=groupIndex,proto3" json:"group_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
 
-const file_visualiser_proto_rawDesc = "" +
+func (x *PartitionAssignment) Reset() {
+	*x = PartitionAssignment{}
+	mi := &file_proto_visualiser_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PartitionAssignment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PartitionAssignment) ProtoMessage() {}
+
+func (x *PartitionAssignment) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PartitionAssignment.ProtoReflect.Descriptor instead.
+func (*PartitionAssignment) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *PartitionAssignment) GetRobotId() string {
+	if x != nil {
+		return x.RobotId
+	}
+	return ""
+}
+
+func (x *PartitionAssignment) GetGroupIndex() uint32 {
+	if x != nil {
+		return x.GroupIndex
+	}
+	return 0
+}
+
+type NetworkPartitionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Assignments   []*PartitionAssignment `protobuf:"bytes,1,rep,name=assignments,proto3" json:"assignments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkPartitionRequest) Reset() {
+	*x = NetworkPartitionRequest{}
+	mi := &file_proto_visualiser_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkPartitionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkPartitionRequest) ProtoMessage() {}
+
+func (x *NetworkPartitionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkPartitionRequest.ProtoReflect.Descriptor instead.
+func (*NetworkPartitionRequest) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *NetworkPartitionRequest) GetAssignments() []*PartitionAssignment {
+	if x != nil {
+		return x.Assignments
+	}
+	return nil
+}
+
+type NetworkPartitionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	AppliedCount  uint32                 `protobuf:"varint,3,opt,name=applied_count,json=appliedCount,proto3" json:"applied_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkPartitionResponse) Reset() {
+	*x = NetworkPartitionResponse{}
+	mi := &file_proto_visualiser_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkPartitionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkPartitionResponse) ProtoMessage() {}
+
+func (x *NetworkPartitionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_visualiser_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkPartitionResponse.ProtoReflect.Descriptor instead.
+func (*NetworkPartitionResponse) Descriptor() ([]byte, []int) {
+	return file_proto_visualiser_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *NetworkPartitionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *NetworkPartitionResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *NetworkPartitionResponse) GetAppliedCount() uint32 {
+	if x != nil {
+		return x.AppliedCount
+	}
+	return 0
+}
+
+var File_proto_visualiser_proto protoreflect.FileDescriptor
+
+const file_proto_visualiser_proto_rawDesc = "" +
 	"\n" +
-	"\x10visualiser.proto\x12\x05swarm\"\x14\n" +
+	"\x16proto/visualiser.proto\x12\x05swarm\"\x14\n" +
 	"\x12EnvironmentRequest\"\x8f\x01\n" +
 	"\x13EnvironmentResponse\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\x01R\x05width\x12\x16\n" +
@@ -881,91 +1037,108 @@ const file_visualiser_proto_rawDesc = "" +
 	"\fKillResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12&\n" +
 	"\x0fkilled_robot_id\x18\x02 \x01(\tR\rkilledRobotId\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error*\x81\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"Q\n" +
+	"\x13PartitionAssignment\x12\x19\n" +
+	"\brobot_id\x18\x01 \x01(\tR\arobotId\x12\x1f\n" +
+	"\vgroup_index\x18\x02 \x01(\rR\n" +
+	"groupIndex\"W\n" +
+	"\x17NetworkPartitionRequest\x12<\n" +
+	"\vassignments\x18\x01 \x03(\v2\x1a.swarm.PartitionAssignmentR\vassignments\"o\n" +
+	"\x18NetworkPartitionResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12#\n" +
+	"\rapplied_count\x18\x03 \x01(\rR\fappliedCount*\x81\x01\n" +
 	"\x0fLeaderLogStatus\x12!\n" +
 	"\x1dLEADER_LOG_STATUS_UNSPECIFIED\x10\x00\x12*\n" +
 	"&LEADER_LOG_STATUS_PENDING_CONFIRMATION\x10\x01\x12\x1f\n" +
-	"\x1bLEADER_LOG_STATUS_CONFIRMED\x10\x022\xec\x02\n" +
+	"\x1bLEADER_LOG_STATUS_CONFIRMED\x10\x022\xc4\x03\n" +
 	"\x11VisualiserService\x12K\n" +
 	"\x12GetEnvironmentData\x12\x19.swarm.EnvironmentRequest\x1a\x1a.swarm.EnvironmentResponse\x12A\n" +
 	"\fGetRobotData\x12\x17.swarm.RobotDataRequest\x1a\x18.swarm.RobotDataResponse\x12S\n" +
 	"\x12SetSimulationPause\x12\x1d.swarm.SimulationPauseRequest\x1a\x1e.swarm.SimulationPauseResponse\x12A\n" +
 	"\fGetLeaderLog\x12\x17.swarm.LeaderLogRequest\x1a\x18.swarm.LeaderLogResponse\x12/\n" +
-	"\x04Kill\x12\x12.swarm.KillRequest\x1a\x13.swarm.KillResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
+	"\x04Kill\x12\x12.swarm.KillRequest\x1a\x13.swarm.KillResponse\x12V\n" +
+	"\x13SetNetworkPartition\x12\x1e.swarm.NetworkPartitionRequest\x1a\x1f.swarm.NetworkPartitionResponseB>Z<github.com/yihre/swarm-project/communications;communicationsb\x06proto3"
 
 var (
-	file_visualiser_proto_rawDescOnce sync.Once
-	file_visualiser_proto_rawDescData []byte
+	file_proto_visualiser_proto_rawDescOnce sync.Once
+	file_proto_visualiser_proto_rawDescData []byte
 )
 
-func file_visualiser_proto_rawDescGZIP() []byte {
-	file_visualiser_proto_rawDescOnce.Do(func() {
-		file_visualiser_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_visualiser_proto_rawDesc), len(file_visualiser_proto_rawDesc)))
+func file_proto_visualiser_proto_rawDescGZIP() []byte {
+	file_proto_visualiser_proto_rawDescOnce.Do(func() {
+		file_proto_visualiser_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_visualiser_proto_rawDesc), len(file_proto_visualiser_proto_rawDesc)))
 	})
-	return file_visualiser_proto_rawDescData
+	return file_proto_visualiser_proto_rawDescData
 }
 
-var file_visualiser_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_visualiser_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
-var file_visualiser_proto_goTypes = []any{
-	(LeaderLogStatus)(0),            // 0: swarm.LeaderLogStatus
-	(*EnvironmentRequest)(nil),      // 1: swarm.EnvironmentRequest
-	(*EnvironmentResponse)(nil),     // 2: swarm.EnvironmentResponse
-	(*SimulationPauseRequest)(nil),  // 3: swarm.SimulationPauseRequest
-	(*SimulationPauseResponse)(nil), // 4: swarm.SimulationPauseResponse
-	(*Obstacle)(nil),                // 5: swarm.Obstacle
-	(*RobotDataRequest)(nil),        // 6: swarm.RobotDataRequest
-	(*RobotInfo)(nil),               // 7: swarm.RobotInfo
-	(*RobotDataResponse)(nil),       // 8: swarm.RobotDataResponse
-	(*LeaderLogRequest)(nil),        // 9: swarm.LeaderLogRequest
-	(*LeaderLogEntry)(nil),          // 10: swarm.LeaderLogEntry
-	(*LeaderLogResponse)(nil),       // 11: swarm.LeaderLogResponse
-	(*KillRequest)(nil),             // 12: swarm.KillRequest
-	(*KillResponse)(nil),            // 13: swarm.KillResponse
+var file_proto_visualiser_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_visualiser_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_proto_visualiser_proto_goTypes = []any{
+	(LeaderLogStatus)(0),             // 0: swarm.LeaderLogStatus
+	(*EnvironmentRequest)(nil),       // 1: swarm.EnvironmentRequest
+	(*EnvironmentResponse)(nil),      // 2: swarm.EnvironmentResponse
+	(*SimulationPauseRequest)(nil),   // 3: swarm.SimulationPauseRequest
+	(*SimulationPauseResponse)(nil),  // 4: swarm.SimulationPauseResponse
+	(*Obstacle)(nil),                 // 5: swarm.Obstacle
+	(*RobotDataRequest)(nil),         // 6: swarm.RobotDataRequest
+	(*RobotInfo)(nil),                // 7: swarm.RobotInfo
+	(*RobotDataResponse)(nil),        // 8: swarm.RobotDataResponse
+	(*LeaderLogRequest)(nil),         // 9: swarm.LeaderLogRequest
+	(*LeaderLogEntry)(nil),           // 10: swarm.LeaderLogEntry
+	(*LeaderLogResponse)(nil),        // 11: swarm.LeaderLogResponse
+	(*KillRequest)(nil),              // 12: swarm.KillRequest
+	(*KillResponse)(nil),             // 13: swarm.KillResponse
+	(*PartitionAssignment)(nil),      // 14: swarm.PartitionAssignment
+	(*NetworkPartitionRequest)(nil),  // 15: swarm.NetworkPartitionRequest
+	(*NetworkPartitionResponse)(nil), // 16: swarm.NetworkPartitionResponse
 }
-var file_visualiser_proto_depIdxs = []int32{
+var file_proto_visualiser_proto_depIdxs = []int32{
 	5,  // 0: swarm.EnvironmentResponse.obstacles:type_name -> swarm.Obstacle
 	7,  // 1: swarm.RobotDataResponse.robots:type_name -> swarm.RobotInfo
 	0,  // 2: swarm.LeaderLogEntry.status:type_name -> swarm.LeaderLogStatus
 	10, // 3: swarm.LeaderLogResponse.entries:type_name -> swarm.LeaderLogEntry
-	1,  // 4: swarm.VisualiserService.GetEnvironmentData:input_type -> swarm.EnvironmentRequest
-	6,  // 5: swarm.VisualiserService.GetRobotData:input_type -> swarm.RobotDataRequest
-	3,  // 6: swarm.VisualiserService.SetSimulationPause:input_type -> swarm.SimulationPauseRequest
-	9,  // 7: swarm.VisualiserService.GetLeaderLog:input_type -> swarm.LeaderLogRequest
-	12, // 8: swarm.VisualiserService.Kill:input_type -> swarm.KillRequest
-	2,  // 9: swarm.VisualiserService.GetEnvironmentData:output_type -> swarm.EnvironmentResponse
-	8,  // 10: swarm.VisualiserService.GetRobotData:output_type -> swarm.RobotDataResponse
-	4,  // 11: swarm.VisualiserService.SetSimulationPause:output_type -> swarm.SimulationPauseResponse
-	11, // 12: swarm.VisualiserService.GetLeaderLog:output_type -> swarm.LeaderLogResponse
-	13, // 13: swarm.VisualiserService.Kill:output_type -> swarm.KillResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	14, // 4: swarm.NetworkPartitionRequest.assignments:type_name -> swarm.PartitionAssignment
+	1,  // 5: swarm.VisualiserService.GetEnvironmentData:input_type -> swarm.EnvironmentRequest
+	6,  // 6: swarm.VisualiserService.GetRobotData:input_type -> swarm.RobotDataRequest
+	3,  // 7: swarm.VisualiserService.SetSimulationPause:input_type -> swarm.SimulationPauseRequest
+	9,  // 8: swarm.VisualiserService.GetLeaderLog:input_type -> swarm.LeaderLogRequest
+	12, // 9: swarm.VisualiserService.Kill:input_type -> swarm.KillRequest
+	15, // 10: swarm.VisualiserService.SetNetworkPartition:input_type -> swarm.NetworkPartitionRequest
+	2,  // 11: swarm.VisualiserService.GetEnvironmentData:output_type -> swarm.EnvironmentResponse
+	8,  // 12: swarm.VisualiserService.GetRobotData:output_type -> swarm.RobotDataResponse
+	4,  // 13: swarm.VisualiserService.SetSimulationPause:output_type -> swarm.SimulationPauseResponse
+	11, // 14: swarm.VisualiserService.GetLeaderLog:output_type -> swarm.LeaderLogResponse
+	13, // 15: swarm.VisualiserService.Kill:output_type -> swarm.KillResponse
+	16, // 16: swarm.VisualiserService.SetNetworkPartition:output_type -> swarm.NetworkPartitionResponse
+	11, // [11:17] is the sub-list for method output_type
+	5,  // [5:11] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_visualiser_proto_init() }
-func file_visualiser_proto_init() {
-	if File_visualiser_proto != nil {
+func init() { file_proto_visualiser_proto_init() }
+func file_proto_visualiser_proto_init() {
+	if File_proto_visualiser_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_visualiser_proto_rawDesc), len(file_visualiser_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_visualiser_proto_rawDesc), len(file_proto_visualiser_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_visualiser_proto_goTypes,
-		DependencyIndexes: file_visualiser_proto_depIdxs,
-		EnumInfos:         file_visualiser_proto_enumTypes,
-		MessageInfos:      file_visualiser_proto_msgTypes,
+		GoTypes:           file_proto_visualiser_proto_goTypes,
+		DependencyIndexes: file_proto_visualiser_proto_depIdxs,
+		EnumInfos:         file_proto_visualiser_proto_enumTypes,
+		MessageInfos:      file_proto_visualiser_proto_msgTypes,
 	}.Build()
-	File_visualiser_proto = out.File
-	file_visualiser_proto_goTypes = nil
-	file_visualiser_proto_depIdxs = nil
+	File_proto_visualiser_proto = out.File
+	file_proto_visualiser_proto_goTypes = nil
+	file_proto_visualiser_proto_depIdxs = nil
 }

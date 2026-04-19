@@ -26,9 +26,15 @@ var upgrader = websocket.Upgrader{
 }
 
 type wsControlMessage struct {
-	Type    string `json:"type"`
-	Pause   *bool  `json:"pause,omitempty"`
-	RobotID string `json:"robot_id,omitempty"`
+	Type        string                  `json:"type"`
+	Pause       *bool                   `json:"pause,omitempty"`
+	RobotID     string                  `json:"robot_id,omitempty"`
+	Assignments []wsPartitionAssignment `json:"assignments,omitempty"`
+}
+
+type wsPartitionAssignment struct {
+	RobotID    string `json:"robot_id"`
+	GroupIndex uint32 `json:"group_index"`
 }
 
 type wsLeaderLogEntry struct {
@@ -222,6 +228,65 @@ func serveWs(client pb.VisualiserServiceClient, w http.ResponseWriter, r *http.R
 					controlPayload["error"] = killResp.GetError()
 				} else if killResp != nil {
 					controlPayload["killed_robot_id"] = killResp.GetKilledRobotId()
+				}
+
+				if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+					log.Printf("Error writing control ack to websocket: %v", err)
+					return
+				}
+
+			case "set_partition":
+				if len(msg.Assignments) == 0 {
+					controlPayload := map[string]interface{}{
+						"type":  "set_partition",
+						"ok":    false,
+						"error": "no partition assignments provided",
+					}
+					if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+						log.Printf("Error writing control ack to websocket: %v", err)
+						return
+					}
+					continue
+				}
+
+				assignments := make([]*pb.PartitionAssignment, 0, len(msg.Assignments))
+				for _, assignment := range msg.Assignments {
+					resolvedRobotID, resolveErr := resolveRobotID(strings.TrimSpace(assignment.RobotID))
+					if resolveErr != nil {
+						controlPayload := map[string]interface{}{
+							"type":  "set_partition",
+							"ok":    false,
+							"error": resolveErr.Error(),
+						}
+						if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {
+							log.Printf("Error writing control ack to websocket: %v", err)
+							return
+						}
+						assignments = nil
+						break
+					}
+
+					assignments = append(assignments, &pb.PartitionAssignment{
+						RobotId:    resolvedRobotID,
+						GroupIndex: assignment.GroupIndex,
+					})
+				}
+				if assignments == nil {
+					continue
+				}
+
+				partitionResp, err := client.SetNetworkPartition(context.Background(), &pb.NetworkPartitionRequest{Assignments: assignments})
+				controlPayload := map[string]interface{}{
+					"type": "set_partition",
+					"ok":   err == nil && partitionResp != nil && partitionResp.GetSuccess(),
+				}
+				if err != nil {
+					log.Printf("Error applying network partition: %v", err)
+					controlPayload["error"] = err.Error()
+				} else if partitionResp != nil && !partitionResp.GetSuccess() {
+					controlPayload["error"] = partitionResp.GetError()
+				} else if partitionResp != nil {
+					controlPayload["applied_count"] = partitionResp.GetAppliedCount()
 				}
 
 				if err := ws.WriteJSON(map[string]interface{}{"control": controlPayload}); err != nil {

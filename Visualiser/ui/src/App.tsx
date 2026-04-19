@@ -36,7 +36,11 @@ interface ControlAck {
     is_paused?: boolean;
     error?: string;
     killed_robot_id?: string;
+    applied_count?: number;
 }
+
+type PartitionGroup = 1 | 2 | 3;
+type PartitionDraft = Record<string, PartitionGroup>;
 
 interface LeaderLogEntry {
     current_leader: string;
@@ -139,6 +143,14 @@ const drawDottedEllipse = (
 
 const isLeaderPingEntry = (entry: LeaderLogEntry): boolean => entry.message.startsWith('leader-ping:');
 
+const hasSameIDs = (left: string[], right: string[]): boolean => {
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) {
+        if (left[i] !== right[i]) return false;
+    }
+    return true;
+};
+
 function App() {
     // these need to be mutable without causing React re-renders, so useRef
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -162,6 +174,11 @@ function App() {
     const [killError, setKillError] = useState<string | null>(null);
     const [lastKilledId, setLastKilledId] = useState<string | null>(null);
     const [killTargetId, setKillTargetId] = useState('');
+    const [knownRobotIDs, setKnownRobotIDs] = useState<string[]>([]);
+    const [partitionDraft, setPartitionDraft] = useState<PartitionDraft>({});
+    const [partitionPending, setPartitionPending] = useState(false);
+    const [partitionError, setPartitionError] = useState<string | null>(null);
+    const [lastPartitionAppliedCount, setLastPartitionAppliedCount] = useState<number | null>(null);
 
     // Initialize PixiJS
     useEffect(() => {
@@ -217,6 +234,7 @@ function App() {
             setConnected(false);
             setPausePending(false);
             setKillPending(false);
+            setPartitionPending(false);
             console.log('Disconnected from server');
         };
 
@@ -245,6 +263,17 @@ function App() {
                     }
                 }
 
+                if (data.control?.type === 'set_partition') {
+                    setPartitionPending(false);
+                    if (data.control.ok) {
+                        setPartitionError(null);
+                        setLastPartitionAppliedCount(data.control.applied_count ?? null);
+                    } else {
+                        setPartitionError(data.control.error ?? 'Failed to apply network partition');
+                        setLastPartitionAppliedCount(null);
+                    }
+                }
+
                 if (data.environment) {
                     setEnv(data.environment);
                     setIsPaused(Boolean(data.environment.is_paused));
@@ -256,6 +285,9 @@ function App() {
                     setRobotCount(data.robots.length);
                     updateRobots(data.robots, appRef.current);
                     updateCommunicationOverlay(data.robots);
+
+                    const sortedIDs = data.robots.map((robot) => robot.id).sort((left, right) => left.localeCompare(right));
+                    setKnownRobotIDs((previous) => (hasSameIDs(previous, sortedIDs) ? previous : sortedIDs));
                 }
 
                 if (data.leader_log) {
@@ -264,6 +296,7 @@ function App() {
             } catch (err) {
                 setPausePending(false);
                 setKillPending(false);
+                setPartitionPending(false);
                 console.error('Error parsing WebSocket message', err);
             }
         };
@@ -273,6 +306,30 @@ function App() {
             wsRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        setPartitionDraft((previous) => {
+            const next: PartitionDraft = {};
+            let changed = false;
+
+            knownRobotIDs.forEach((robotID) => {
+                const existing = previous[robotID] ?? 1;
+                next[robotID] = existing;
+                if (previous[robotID] !== existing) {
+                    changed = true;
+                }
+            });
+
+            if (!changed) {
+                const previousKeys = Object.keys(previous);
+                if (previousKeys.length !== knownRobotIDs.length) {
+                    changed = true;
+                }
+            }
+
+            return changed ? next : previous;
+        });
+    }, [knownRobotIDs]);
 
     const togglePause = () => {
         const ws = wsRef.current;
@@ -324,6 +381,42 @@ function App() {
             setKillPending(false);
             setKillError('Failed to send kill command');
             console.error('Error sending kill command', error);
+        }
+    };
+
+    const updateRobotPartitionGroup = (robotID: string, nextGroup: PartitionGroup) => {
+        setPartitionDraft((previous) => {
+            if (previous[robotID] === nextGroup) {
+                return previous;
+            }
+            return {
+                ...previous,
+                [robotID]: nextGroup,
+            };
+        });
+        setPartitionError(null);
+        setLastPartitionAppliedCount(null);
+    };
+
+    const applyPartitioning = () => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || partitionPending || knownRobotIDs.length === 0) return;
+
+        const assignments = knownRobotIDs.map((robotID) => ({
+            robot_id: robotID,
+            group_index: partitionDraft[robotID] ?? 1,
+        }));
+
+        setPartitionPending(true);
+        setPartitionError(null);
+        setLastPartitionAppliedCount(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'set_partition', assignments }));
+        } catch (error) {
+            setPartitionPending(false);
+            setPartitionError('Failed to send partition command');
+            console.error('Error sending partition command', error);
         }
     };
 
@@ -390,6 +483,9 @@ function App() {
     const isLeaderLogTabActive = activeTool === 'leader-log';
     const isRobotKillerTabActive = activeTool === 'robot-killer';
     const isPartioningTabActive = activeTool === 'partioning';
+    const groupOneCount = knownRobotIDs.filter((robotID) => (partitionDraft[robotID] ?? 1) === 1).length;
+    const groupTwoCount = knownRobotIDs.filter((robotID) => (partitionDraft[robotID] ?? 1) === 2).length;
+    const groupThreeCount = knownRobotIDs.filter((robotID) => (partitionDraft[robotID] ?? 1) === 3).length;
 
     const updateCommunicationOverlay = (robots: Robot[]) => {
         const graphics = commGraphicsRef.current;
@@ -586,7 +682,7 @@ function App() {
                             role="tab"
                             aria-selected={isPartioningTabActive}
                         >
-                            Partioning
+                            Partitioning
                         </button>
                     </div>
 
@@ -682,10 +778,54 @@ function App() {
                         )}
 
                         {isPartioningTabActive && (
-                            <section className="tool-panel">
-                                <div className="kill-robot-section">
-                                    <div className="kill-robot-feedback" role="status">
-                                        Partioning tools will appear here.
+                            <section className="tool-panel tool-panel-scrollable">
+                                <div className="partition-section">
+                                    <div className="partition-summary" aria-label="Partition group totals">
+                                        <span>G1: {groupOneCount}</span>
+                                        <span>G2: {groupTwoCount}</span>
+                                        <span>G3: {groupThreeCount}</span>
+                                    </div>
+
+                                    <div className="partition-list" role="list" aria-label="Robot partition assignments">
+                                        {knownRobotIDs.map((robotID) => (
+                                            <div className="partition-row" role="listitem" key={robotID}>
+                                                <span className="partition-robot-id mono">{robotID.slice(0, 5)}</span>
+                                                <label className="partition-select-label" htmlFor={`partition-${robotID}`}>
+                                                    Group
+                                                </label>
+                                                <select
+                                                    id={`partition-${robotID}`}
+                                                    className="partition-select"
+                                                    value={partitionDraft[robotID] ?? 1}
+                                                    onChange={(event) => updateRobotPartitionGroup(robotID, Number(event.target.value) as PartitionGroup)}
+                                                    disabled={partitionPending}
+                                                >
+                                                    <option value={1}>1</option>
+                                                    <option value={2}>2</option>
+                                                    <option value={3}>3</option>
+                                                </select>
+                                            </div>
+                                        ))}
+                                        {knownRobotIDs.length === 0 && (
+                                            <div className="log-empty">No robots available.</div>
+                                        )}
+                                    </div>
+
+                                    <div className="partition-footer">
+                                        <button
+                                            type="button"
+                                            className="kill-target-button"
+                                            onClick={applyPartitioning}
+                                            disabled={!connected || partitionPending || knownRobotIDs.length === 0}
+                                        >
+                                            {partitionPending ? 'Applying…' : 'Implement'}
+                                        </button>
+                                        {lastPartitionAppliedCount !== null && (
+                                            <div className="kill-robot-feedback" role="status">
+                                                Applied grouping for {lastPartitionAppliedCount} robots
+                                            </div>
+                                        )}
+                                        {partitionError && <div className="control-error">{partitionError}</div>}
                                     </div>
                                 </div>
                             </section>

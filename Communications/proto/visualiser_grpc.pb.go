@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0--rc2
-// source: visualiser.proto
+// source: proto/visualiser.proto
 
 package communications
 
@@ -19,11 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	VisualiserService_GetEnvironmentData_FullMethodName = "/swarm.VisualiserService/GetEnvironmentData"
-	VisualiserService_GetRobotData_FullMethodName       = "/swarm.VisualiserService/GetRobotData"
-	VisualiserService_SetSimulationPause_FullMethodName = "/swarm.VisualiserService/SetSimulationPause"
-	VisualiserService_GetLeaderLog_FullMethodName       = "/swarm.VisualiserService/GetLeaderLog"
-	VisualiserService_Kill_FullMethodName               = "/swarm.VisualiserService/Kill"
+	VisualiserService_GetEnvironmentData_FullMethodName  = "/swarm.VisualiserService/GetEnvironmentData"
+	VisualiserService_GetRobotData_FullMethodName        = "/swarm.VisualiserService/GetRobotData"
+	VisualiserService_SetSimulationPause_FullMethodName  = "/swarm.VisualiserService/SetSimulationPause"
+	VisualiserService_GetLeaderLog_FullMethodName        = "/swarm.VisualiserService/GetLeaderLog"
+	VisualiserService_Kill_FullMethodName                = "/swarm.VisualiserService/Kill"
+	VisualiserService_SetNetworkPartition_FullMethodName = "/swarm.VisualiserService/SetNetworkPartition"
 )
 
 // VisualiserServiceClient is the client API for VisualiserService service.
@@ -40,6 +41,8 @@ type VisualiserServiceClient interface {
 	GetLeaderLog(ctx context.Context, in *LeaderLogRequest, opts ...grpc.CallOption) (*LeaderLogResponse, error)
 	// visualiser removes a robot from the simulation and signals it to shut down.
 	Kill(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (*KillResponse, error)
+	// visualiser applies robot group assignments to simulate a network partition.
+	SetNetworkPartition(ctx context.Context, in *NetworkPartitionRequest, opts ...grpc.CallOption) (*NetworkPartitionResponse, error)
 }
 
 type visualiserServiceClient struct {
@@ -100,6 +103,16 @@ func (c *visualiserServiceClient) Kill(ctx context.Context, in *KillRequest, opt
 	return out, nil
 }
 
+func (c *visualiserServiceClient) SetNetworkPartition(ctx context.Context, in *NetworkPartitionRequest, opts ...grpc.CallOption) (*NetworkPartitionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NetworkPartitionResponse)
+	err := c.cc.Invoke(ctx, VisualiserService_SetNetworkPartition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VisualiserServiceServer is the server API for VisualiserService service.
 // All implementations must embed UnimplementedVisualiserServiceServer
 // for forward compatibility.
@@ -114,6 +127,8 @@ type VisualiserServiceServer interface {
 	GetLeaderLog(context.Context, *LeaderLogRequest) (*LeaderLogResponse, error)
 	// visualiser removes a robot from the simulation and signals it to shut down.
 	Kill(context.Context, *KillRequest) (*KillResponse, error)
+	// visualiser applies robot group assignments to simulate a network partition.
+	SetNetworkPartition(context.Context, *NetworkPartitionRequest) (*NetworkPartitionResponse, error)
 	mustEmbedUnimplementedVisualiserServiceServer()
 }
 
@@ -138,6 +153,9 @@ func (UnimplementedVisualiserServiceServer) GetLeaderLog(context.Context, *Leade
 }
 func (UnimplementedVisualiserServiceServer) Kill(context.Context, *KillRequest) (*KillResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Kill not implemented")
+}
+func (UnimplementedVisualiserServiceServer) SetNetworkPartition(context.Context, *NetworkPartitionRequest) (*NetworkPartitionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetNetworkPartition not implemented")
 }
 func (UnimplementedVisualiserServiceServer) mustEmbedUnimplementedVisualiserServiceServer() {}
 func (UnimplementedVisualiserServiceServer) testEmbeddedByValue()                           {}
@@ -250,6 +268,24 @@ func _VisualiserService_Kill_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VisualiserService_SetNetworkPartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NetworkPartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VisualiserServiceServer).SetNetworkPartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VisualiserService_SetNetworkPartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VisualiserServiceServer).SetNetworkPartition(ctx, req.(*NetworkPartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VisualiserService_ServiceDesc is the grpc.ServiceDesc for VisualiserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -277,7 +313,11 @@ var VisualiserService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Kill",
 			Handler:    _VisualiserService_Kill_Handler,
 		},
+		{
+			MethodName: "SetNetworkPartition",
+			Handler:    _VisualiserService_SetNetworkPartition_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "visualiser.proto",
+	Metadata: "proto/visualiser.proto",
 }

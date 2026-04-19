@@ -78,6 +78,7 @@ type server struct {
 	lastLandmarkSensorReport map[string]map[LandmarkID]time.Time
 	leaderLogSnapshots       map[string]*pb.RaftLogSnapshotRequest
 	terminatedRobotIDs       map[string]struct{}
+	partitionGroupByRobotID  map[string]uint32
 }
 
 // -------------------------------------------------------------------------
@@ -97,6 +98,7 @@ func newServer() *server {
 		lastLandmarkSensorReport: make(map[string]map[LandmarkID]time.Time),
 		leaderLogSnapshots:       make(map[string]*pb.RaftLogSnapshotRequest),
 		terminatedRobotIDs:       make(map[string]struct{}),
+		partitionGroupByRobotID:  make(map[string]uint32),
 		paused:                   false,
 	}
 	s.spawnLandmarks()
@@ -155,7 +157,13 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 			},
 		}
 		s.robots[req.GetRobotId()] = state
+		s.partitionGroupByRobotID[req.GetRobotId()] = 1
 		log.Printf("Robot %s registered at (%.1f, %.1f)", req.GetRobotId(), state.Info.X, state.Info.Y)
+	} else {
+		_, tracked := s.partitionGroupByRobotID[req.GetRobotId()]
+		if !tracked {
+			s.partitionGroupByRobotID[req.GetRobotId()] = 1
+		}
 	}
 
 	state.LastSeen = time.Now()
@@ -269,6 +277,9 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 		if id == reqRobotID {
 			continue
 		}
+		if !s.samePartitionLocked(reqRobotID, id) {
+			continue
+		}
 		distX := reqState.Info.X - state.Info.X
 		distY := reqState.Info.Y - state.Info.Y
 		distance := math.Sqrt(distX*distX + distY*distY)
@@ -359,6 +370,9 @@ func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) 
 		if candidateID == sourceID {
 			continue
 		}
+		if !s.samePartitionLocked(sourceID, candidateID) {
+			continue
+		}
 
 		candidateState := s.robots[candidateID]
 		distX := sourceState.Info.X - candidateState.Info.X
@@ -369,6 +383,21 @@ func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) 
 	}
 
 	return peers
+}
+
+func (s *server) partitionGroupLocked(robotID string) uint32 {
+	if robotID == "" {
+		return 1
+	}
+	group, ok := s.partitionGroupByRobotID[robotID]
+	if !ok || group < 1 || group > 3 {
+		return 1
+	}
+	return group
+}
+
+func (s *server) samePartitionLocked(leftRobotID string, rightRobotID string) bool {
+	return s.partitionGroupLocked(leftRobotID) == s.partitionGroupLocked(rightRobotID)
 }
 
 // -------------------------------------------------------------------------
@@ -413,6 +442,39 @@ func (s *server) SetSimulationPause(ctx context.Context, req *pb.SimulationPause
 	return &pb.SimulationPauseResponse{
 		Success:  true,
 		IsPaused: s.paused,
+	}, nil
+}
+
+func (s *server) SetNetworkPartition(ctx context.Context, req *pb.NetworkPartitionRequest) (*pb.NetworkPartitionResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	assignments := req.GetAssignments()
+	if len(assignments) == 0 {
+		return &pb.NetworkPartitionResponse{Success: false, Error: "no partition assignments provided"}, nil
+	}
+
+	for _, assignment := range assignments {
+		robotID := assignment.GetRobotId()
+		if robotID == "" {
+			return &pb.NetworkPartitionResponse{Success: false, Error: "partition assignment has empty robot id"}, nil
+		}
+		if _, exists := s.robots[robotID]; !exists {
+			return &pb.NetworkPartitionResponse{Success: false, Error: "partition assignment references unknown robot id"}, nil
+		}
+		groupIndex := assignment.GetGroupIndex()
+		if groupIndex < 1 || groupIndex > 3 {
+			return &pb.NetworkPartitionResponse{Success: false, Error: "group index must be between 1 and 3"}, nil
+		}
+	}
+
+	for _, assignment := range assignments {
+		s.partitionGroupByRobotID[assignment.GetRobotId()] = assignment.GetGroupIndex()
+	}
+
+	return &pb.NetworkPartitionResponse{
+		Success:      true,
+		AppliedCount: uint32(len(assignments)),
 	}, nil
 }
 
@@ -477,6 +539,7 @@ func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*pb.KillRespons
 	delete(s.robots, victim)
 	delete(s.leaderLogSnapshots, victim)
 	delete(s.lastLandmarkSensorReport, victim)
+	delete(s.partitionGroupByRobotID, victim)
 	s.terminatedRobotIDs[victim] = struct{}{}
 
 	log.Printf("[world] kill requested: removed robot %s from simulation", victim)
@@ -543,6 +606,7 @@ func (s *server) runCleanupTick() {
 				log.Printf("Robot %s timed out, removing from world", id)
 				delete(s.robots, id)
 				delete(s.leaderLogSnapshots, id)
+				delete(s.partitionGroupByRobotID, id)
 			}
 		}
 		s.mu.Unlock()

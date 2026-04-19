@@ -8,6 +8,16 @@ import (
 	pb "github.com/yihre/swarm-project/communications/proto"
 )
 
+func countLogEntriesOfType(robot *Robot, entryType string) int {
+	count := 0
+	for _, entry := range robot.raftLog {
+		if entry.Type == entryType {
+			count++
+		}
+	}
+	return count
+}
+
 // Objective: verify casualty verification is only recorded once the committed Raft entry is applied.
 // Expected output: the store remains unverified before commit and becomes verified after applyCommittedEntriesLocked runs.
 func TestRaftCasualtyVerification(t *testing.T) {
@@ -131,5 +141,119 @@ func TestFollowerAppliesCommittedCasualtyVerification(t *testing.T) {
 	entry := findEntry(t, follower.store, "casualty-2")
 	if !entry.Verified {
 		t.Fatalf("expected follower to verify casualty after committed raft apply")
+	}
+}
+
+// Objective: verify a leader appends a pending casualty verification once and only once.
+// Expected output: the first leader tick appends one casualty_verified entry, and later ticks do not add duplicates.
+func TestLeaderAppendsPendingCasualtyVerificationOnce(t *testing.T) {
+	leader := NewRobot("leader", nil)
+	leader.raftState = raftLeader
+	leader.raftTerm = 1
+
+	id := LandmarkID("casualty-once")
+	loc := Location{X: 180, Y: 240}
+	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-1", 1); verified {
+		t.Fatalf("expected first report to stay unverified")
+	}
+	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-2", 2); verified {
+		t.Fatalf("expected second report to stay unverified")
+	}
+	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
+		t.Fatalf("expected third report to signal quorum")
+	}
+
+	leader.syncRaftWithPeers(context.Background())
+	if got := countLogEntriesOfType(leader, "casualty_verified"); got != 1 {
+		t.Fatalf("expected exactly one casualty_verified entry after first leader tick, got %d", got)
+	}
+
+	leader.syncRaftWithPeers(context.Background())
+	if got := countLogEntriesOfType(leader, "casualty_verified"); got != 1 {
+		t.Fatalf("expected no duplicate casualty_verified entries on later leader ticks, got %d", got)
+	}
+}
+
+// Objective: verify a committed casualty is not appended again after leadership changes.
+// Expected output: a future leader that already has the committed casualty in its store does not add a second casualty_verified entry.
+func TestCommittedCasualtyIsNotRecommittedByFutureLeader(t *testing.T) {
+	leader := NewRobot("leader", nil)
+	leader.raftState = raftLeader
+	leader.raftTerm = 1
+
+	id := LandmarkID("casualty-future-leader")
+	loc := Location{X: 220, Y: 280}
+	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-1", 1); verified {
+		t.Fatalf("expected first report to stay unverified")
+	}
+	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-2", 2); verified {
+		t.Fatalf("expected second report to stay unverified")
+	}
+	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
+		t.Fatalf("expected third report to signal quorum")
+	}
+
+	leader.syncRaftWithPeers(context.Background())
+	if got := countLogEntriesOfType(leader, "casualty_verified"); got != 1 {
+		t.Fatalf("expected one casualty_verified entry before commit, got %d", got)
+	}
+
+	leader.mu.Lock()
+	leader.commitIndex = int64(len(leader.raftLog) - 1)
+	leader.applyCommittedEntriesLocked()
+	leader.mu.Unlock()
+
+	futureLeader := NewRobot("future-leader", nil)
+	futureLeader.raftTerm = 1
+	futureLeader.raftState = raftFollower
+
+	committedSnapshot := &LandmarkEntry{
+		ID:       id,
+		Type:     LandmarkCasualty,
+		Location: loc,
+		Reporters: map[RobotID]int{
+			"peer-1": 1,
+			"peer-2": 2,
+			"peer-3": 3,
+		},
+	}
+	payload, err := json.Marshal(committedSnapshot)
+	if err != nil {
+		t.Fatalf("failed to marshal committed snapshot: %v", err)
+	}
+
+	appendResp := futureLeader.HandleAppendEntries(&pb.AppendEntriesRequest{
+		Term:         1,
+		LeaderId:     "leader",
+		PrevLogIndex: -1,
+		PrevLogTerm:  -1,
+		Entries: []*pb.RaftLogEntry{{
+			Term:            1,
+			Command:         payload,
+			LogType:         "casualty_verified",
+			TimestampUnixMs: 1,
+		}},
+		LeaderCommit: 0,
+	})
+	if !appendResp.GetSuccess() {
+		t.Fatalf("expected future leader append to succeed")
+	}
+
+	if got := countLogEntriesOfType(futureLeader, "casualty_verified"); got != 1 {
+		t.Fatalf("expected the committed casualty to exist once on the future leader, got %d", got)
+	}
+	entry := findEntry(t, futureLeader.store, id)
+	if !entry.Verified {
+		t.Fatalf("expected future leader to have the casualty marked verified after commit apply")
+	}
+
+	futureLeader.raftState = raftLeader
+	futureLeader.syncRaftWithPeers(context.Background())
+
+	if got := countLogEntriesOfType(futureLeader, "casualty_verified"); got != 1 {
+		t.Fatalf("expected future leader not to recommit the same casualty, got %d casualty_verified entries", got)
+	}
+	if len(futureLeader.raftLog) != 1 {
+		t.Fatalf("expected no extra raft entries to be added, got %d", len(futureLeader.raftLog))
 	}
 }

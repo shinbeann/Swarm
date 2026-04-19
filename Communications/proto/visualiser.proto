@@ -14,6 +14,8 @@ service VisualiserService {
   rpc GetLeaderLog(LeaderLogRequest) returns (LeaderLogResponse);
   // visualiser removes a robot from the simulation and signals it to shut down.
   rpc Kill(KillRequest) returns (KillResponse);
+  // visualiser applies robot group assignments to simulate a network partition.
+  rpc SetNetworkPartition(NetworkPartitionRequest) returns (NetworkPartitionResponse);
 }
 
 message EnvironmentRequest {}
@@ -93,4 +95,19 @@ message KillResponse {
   bool success = 1;
   string killed_robot_id = 2;
   string error = 3;
+}
+
+message PartitionAssignment {
+  string robot_id = 1;
+  uint32 group_index = 2;
+}
+
+message NetworkPartitionRequest {
+  repeated PartitionAssignment assignments = 1;
+}
+
+message NetworkPartitionResponse {
+  bool success = 1;
+  string error = 2;
+  uint32 applied_count = 3;
 }
