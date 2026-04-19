@@ -13,8 +13,9 @@ const (
 
 // KnowledgeStore stores discovered landmarks.
 type KnowledgeStore struct {
-	mu      sync.RWMutex
-	entries map[LandmarkID]*LandmarkEntry
+	mu         sync.RWMutex
+	entries    map[LandmarkID]*LandmarkEntry
+	verifiedCh chan<- *LandmarkEntry // optional: quorum reached → Raft (set via SetVerifiedCh)
 }
 
 func NewKnowledgeStore() *KnowledgeStore {
@@ -39,6 +40,14 @@ func cloneLandmarkEntry(entry *LandmarkEntry) *LandmarkEntry {
 	return &clone
 }
 
+// SetVerifiedCh wires the one-way notification channel for casualty quorum (awaiting Raft commit).
+// Call once during Robot construction before gossip runs.
+func (ks *KnowledgeStore) SetVerifiedCh(ch chan<- *LandmarkEntry) {
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
+	ks.verifiedCh = ch
+}
+
 // insert or update a landmark from a single robot ID
 func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, reporter RobotID, timestamp int) bool {
 	ks.mu.Lock()
@@ -50,11 +59,11 @@ func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, r
 			id, loc.X, loc.Y, reporter, timestamp)
 	}
 
-	return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp}, true)
+	return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp}, true, timestamp)
 }
 
 // merge full landmark entry
-func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
+func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry, now int) bool {
 	if snapshot == nil {
 		return false
 	}
@@ -63,7 +72,7 @@ func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
 	defer ks.mu.Unlock()
 
 	entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
-	newlyVerified := ks.mergeReportersLocked(entry, snapshot.Reporters, true)
+	newlyVerified := ks.mergeReportersLocked(entry, snapshot.Reporters, true, now)
 	if snapshot.Committed && !entry.Committed {
 		entry.Committed = true
 		log.Printf("[KS] casualty %s COMMITTED via merged snapshot", entry.ID)
@@ -82,12 +91,17 @@ func (ks *KnowledgeStore) ApplyCasualtyCommitted(snapshot *LandmarkEntry) {
 	defer ks.mu.Unlock()
 
 	entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
-	ks.mergeReportersLocked(entry, snapshot.Reporters, false)
+	ks.mergeReportersLocked(entry, snapshot.Reporters, false, 0)
 	entry.Verified = true
 	if !entry.Committed {
 		entry.Committed = true
 		log.Printf("[KS] casualty %s COMMITTED via committed raft log", entry.ID)
 	}
+}
+
+// ApplyCasualtyVerified is an alias for ApplyCasualtyCommitted kept for robot.go compatibility.
+func (ks *KnowledgeStore) ApplyCasualtyVerified(snapshot *LandmarkEntry) {
+	ks.ApplyCasualtyCommitted(snapshot)
 }
 
 func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
@@ -98,22 +112,6 @@ func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
 	for _, entry := range ks.entries {
 		result = append(result, cloneLandmarkEntry(entry))
 	}
-	return result
-}
-
-// VerifiedCasualtyIDs returns casualty ids that have reached local verification quorum.
-func (ks *KnowledgeStore) VerifiedCasualtyIDs() []string {
-	ks.mu.RLock()
-	defer ks.mu.RUnlock()
-
-	result := make([]string, 0)
-	for _, entry := range ks.entries {
-		if entry.Type != LandmarkCasualty || !entry.Verified {
-			continue
-		}
-		result = append(result, string(entry.ID))
-	}
-
 	return result
 }
 
@@ -162,16 +160,18 @@ func (ks *KnowledgeStore) ensureEntryLocked(id LandmarkID, ltype LandmarkType, l
 	return entry, true
 }
 
-func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters map[RobotID]int, notifyVerification bool) bool {
+func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters map[RobotID]int, notifyVerification bool, now int) bool {
 	if entry.Reporters == nil {
 		entry.Reporters = make(map[RobotID]int)
 	}
 
+	added := false
 	for reporter, timestamp := range reporters {
 		if _, alreadyReported := entry.Reporters[reporter]; alreadyReported {
 			continue
 		}
 		entry.Reporters[reporter] = timestamp
+		added = true
 
 		if entry.Type == LandmarkCasualty {
 			log.Printf("[KS] casualty %s reporter added: %s | total reporters=%d verified=%v",
@@ -179,11 +179,23 @@ func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters m
 		}
 	}
 
+	// Bump entry Lamport timestamp whenever new information arrives.
+	// now=0 is passed by Raft apply paths which must not affect the gossip watermark.
+	if added && now > entry.Timestamp {
+		entry.Timestamp = now
+	}
+
 	if entry.Type == LandmarkCasualty && len(entry.Reporters) >= VerificationQuorum && !entry.Verified {
 		entry.Verified = true
 		if notifyVerification {
 			log.Printf("[KS] casualty %s reached verification quorum (%d reporters); awaiting raft commit",
 				entry.ID, len(entry.Reporters))
+			if ks.verifiedCh != nil {
+				select {
+				case ks.verifiedCh <- cloneLandmarkEntry(entry):
+				default:
+				}
+			}
 		}
 		return true
 	}

@@ -144,7 +144,7 @@ func (ge *GossipEngine) deltaForPeer(peerID RobotID, bandwidth float64) []*Landm
 
 	delta := make([]*LandmarkEntry, 0, len(allEntries))
 	for _, entry := range allEntries {
-		if entryTimestamp(entry) > lastSync {
+		if entry.Timestamp > lastSync {
 			delta = append(delta, entry)
 		}
 	}
@@ -162,10 +162,8 @@ func (ge *GossipEngine) deltaForPeer(peerID RobotID, bandwidth float64) []*Landm
 			return leftCasualty
 		}
 
-		leftTS := entryTimestamp(left)
-		rightTS := entryTimestamp(right)
-		if leftTS != rightTS {
-			return leftTS > rightTS
+		if left.Timestamp != right.Timestamp {
+			return left.Timestamp > right.Timestamp
 		}
 
 		return left.ID < right.ID
@@ -191,16 +189,6 @@ func (ge *GossipEngine) deltaForPeer(peerID RobotID, bandwidth float64) []*Landm
 			e.ID, e.Type, entryPriority(e))
 	}
 	return delta
-}
-
-func entryTimestamp(entry *LandmarkEntry) int {
-	maxTimestamp := 0
-	for _, ts := range entry.Reporters {
-		if ts > maxTimestamp {
-			maxTimestamp = ts
-		}
-	}
-	return maxTimestamp
 }
 
 func bandwidthEntryCap(bandwidth float64) int {
@@ -247,8 +235,9 @@ func (ge *GossipEngine) OnReceive(msg *GossipMessage) {
 	}
 
 	ge.robot.Clock.Update(msg.Timestamp)
+	now := ge.robot.Clock.Time() // read after Update — causally correct local time
 	for _, entry := range msg.Entries {
-		ge.robot.store.MergeSnapshot(entry)
+		ge.robot.store.MergeSnapshot(entry, now)
 	}
 
 	// Record sender as a direct 1-hop neighbour in the routing table.
