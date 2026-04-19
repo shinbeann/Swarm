@@ -5,10 +5,8 @@ import (
 	"testing"
 )
 
-//LC means Log Consistency
-// C means Commit
-
-// LC1 & LC2: Conflict truncation and excess entry truncation
+// Objective: verify conflicting follower logs are truncated and replaced by the leader's entries.
+// Expected output: the follower rejects the conflict first, then accepts the leader log and ends with the leader's two-entry history.
 func TestRaftLogConsistencyTruncation(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2 := robots[0], robots[1]
@@ -70,7 +68,8 @@ func TestRaftLogConsistencyTruncation(t *testing.T) {
 	}
 }
 
-// C1: Leader own-term-only commits (Indirect Commit)
+// Objective: verify leaders cannot directly commit old-term entries and only commit them indirectly through a current-term entry.
+// Expected output: the old entry remains uncommitted until the term 2 entry reaches majority, then commitIndex becomes 1.
 func TestRaftLogConsistencyIndirectCommit(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -118,7 +117,8 @@ func TestRaftLogConsistencyIndirectCommit(t *testing.T) {
 	}
 }
 
-// C2: Follower commitIndex advance math
+// Objective: verify a follower advances commitIndex to the minimum of leaderCommit and its last log index.
+// Expected output: after heartbeat delivery, the follower commitIndex becomes 1.
 func TestRaftLogConsistencyFollowerCommit(t *testing.T) {
 	robots := setupCluster(2)
 	r1, r2 := robots[0], robots[1]

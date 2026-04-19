@@ -10,6 +10,9 @@ interface Robot {
     is_leader?: boolean;
     communication_range?: number;
     in_range_peer_ids?: string[];
+    raft_term?: number;
+    raft_log_index?: number;
+    commit_index?: number;
 }
 
 interface Obstacle {
@@ -32,11 +35,32 @@ interface ControlAck {
     ok?: boolean;
     is_paused?: boolean;
     error?: string;
+    killed_robot_id?: string;
+    applied_count?: number;
+}
+
+type PartitionGroup = 1 | 2 | 3;
+type PartitionDraft = Record<string, PartitionGroup>;
+
+interface LeaderLogEntry {
+    current_leader: string;
+    term: number;
+    index: number;
+    message: string;
+    status: number;
+    timestamp_unix_ms: number;
+}
+
+interface LeaderLogData {
+    current_leader?: string;
+    current_term?: number;
+    entries?: LeaderLogEntry[];
 }
 
 interface StatePayload {
     environment?: Environment;
     robots?: Robot[];
+    leader_log?: LeaderLogData;
     control?: ControlAck;
 }
 
@@ -82,6 +106,9 @@ const hslToHexColor = (h: number, s: number, l: number): number => {
     return (red << 16) | (green << 8) | blue;
 };
 
+// Deterministic color generation based on Robot ID using a hash function.
+// Ensure that a specific Robot ID always gets the same color
+// Different IDs get colors that are visually spread apart
 const colorForRobot = (robotID: string): number => {
     let hash = 2166136261;
     for (let i = 0; i < robotID.length; i++) {
@@ -114,7 +141,18 @@ const drawDottedEllipse = (
     graphics.fill({color, alpha});
 };
 
+const isLeaderPingEntry = (entry: LeaderLogEntry): boolean => entry.message.startsWith('leader-ping:');
+
+const hasSameIDs = (left: string[], right: string[]): boolean => {
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) {
+        if (left[i] !== right[i]) return false;
+    }
+    return true;
+};
+
 function App() {
+    // these need to be mutable without causing React re-renders, so useRef
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const appRef = useRef<PIXI.Application | null>(null);
@@ -124,11 +162,23 @@ function App() {
     const commGraphicsRef = useRef<PIXI.Graphics | null>(null);
 
     const [env, setEnv] = useState<Environment>({ width: 1000, height: 1000, obstacles: [] });
-    const [robotCount, setRobotCount] = useState(0);
+    const [leaderLog, setLeaderLog] = useState<LeaderLogData>({ current_leader: '', current_term: 0, entries: [] });
+    const [hideLeaderPings, setHideLeaderPings] = useState(true);
+    const [activeTool, setActiveTool] = useState<'leader-log' | 'robot-killer' | 'partioning'>('leader-log');
     const [connected, setConnected] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [pausePending, setPausePending] = useState(false);
     const [pauseError, setPauseError] = useState<string | null>(null);
+    const [robotCount, setRobotCount] = useState(0);
+    const [killPending, setKillPending] = useState(false);
+    const [killError, setKillError] = useState<string | null>(null);
+    const [lastKilledId, setLastKilledId] = useState<string | null>(null);
+    const [killTargetId, setKillTargetId] = useState('');
+    const [knownRobotIDs, setKnownRobotIDs] = useState<string[]>([]);
+    const [partitionDraft, setPartitionDraft] = useState<PartitionDraft>({});
+    const [partitionPending, setPartitionPending] = useState(false);
+    const [partitionError, setPartitionError] = useState<string | null>(null);
+    const [lastPartitionAppliedCount, setLastPartitionAppliedCount] = useState<number | null>(null);
 
     // Initialize PixiJS
     useEffect(() => {
@@ -183,6 +233,8 @@ function App() {
         ws.onclose = () => {
             setConnected(false);
             setPausePending(false);
+            setKillPending(false);
+            setPartitionPending(false);
             console.log('Disconnected from server');
         };
 
@@ -200,6 +252,28 @@ function App() {
                     }
                 }
 
+                if (data.control?.type === 'kill') {
+                    setKillPending(false);
+                    if (data.control.ok) {
+                        setKillError(null);
+                        setLastKilledId(data.control.killed_robot_id ?? null);
+                    } else {
+                        setKillError(data.control.error ?? 'Failed to kill robot');
+                        setLastKilledId(null);
+                    }
+                }
+
+                if (data.control?.type === 'set_partition') {
+                    setPartitionPending(false);
+                    if (data.control.ok) {
+                        setPartitionError(null);
+                        setLastPartitionAppliedCount(data.control.applied_count ?? null);
+                    } else {
+                        setPartitionError(data.control.error ?? 'Failed to apply network partition');
+                        setLastPartitionAppliedCount(null);
+                    }
+                }
+
                 if (data.environment) {
                     setEnv(data.environment);
                     setIsPaused(Boolean(data.environment.is_paused));
@@ -208,12 +282,21 @@ function App() {
                     }
                 }
                 if (data.robots && appRef.current) {
+                    setRobotCount(data.robots.length);
                     updateRobots(data.robots, appRef.current);
                     updateCommunicationOverlay(data.robots);
-                    setRobotCount(data.robots.length);
+
+                    const sortedIDs = data.robots.map((robot) => robot.id).sort((left, right) => left.localeCompare(right));
+                    setKnownRobotIDs((previous) => (hasSameIDs(previous, sortedIDs) ? previous : sortedIDs));
+                }
+
+                if (data.leader_log) {
+                    setLeaderLog(data.leader_log);
                 }
             } catch (err) {
                 setPausePending(false);
+                setKillPending(false);
+                setPartitionPending(false);
                 console.error('Error parsing WebSocket message', err);
             }
         };
@@ -223,6 +306,30 @@ function App() {
             wsRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        setPartitionDraft((previous) => {
+            const next: PartitionDraft = {};
+            let changed = false;
+
+            knownRobotIDs.forEach((robotID) => {
+                const existing = previous[robotID] ?? 1;
+                next[robotID] = existing;
+                if (previous[robotID] !== existing) {
+                    changed = true;
+                }
+            });
+
+            if (!changed) {
+                const previousKeys = Object.keys(previous);
+                if (previousKeys.length !== knownRobotIDs.length) {
+                    changed = true;
+                }
+            }
+
+            return changed ? next : previous;
+        });
+    }, [knownRobotIDs]);
 
     const togglePause = () => {
         const ws = wsRef.current;
@@ -238,6 +345,78 @@ function App() {
             setPausePending(false);
             setPauseError('Failed to send pause command');
             console.error('Error sending pause command', error);
+        }
+    };
+
+    const killRobot = () => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || killPending || robotCount === 0) return;
+
+        setKillPending(true);
+        setKillError(null);
+        setLastKilledId(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'kill' }));
+        } catch (error) {
+            setKillPending(false);
+            setKillError('Failed to send kill command');
+            console.error('Error sending kill command', error);
+        }
+    };
+
+    const killRobotById = () => {
+        const ws = wsRef.current;
+        const robotId = killTargetId.trim();
+
+        if (!ws || ws.readyState !== WebSocket.OPEN || killPending || robotId.length !== 5) return;
+
+        setKillPending(true);
+        setKillError(null);
+        setLastKilledId(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'kill', robot_id: robotId }));
+        } catch (error) {
+            setKillPending(false);
+            setKillError('Failed to send kill command');
+            console.error('Error sending kill command', error);
+        }
+    };
+
+    const updateRobotPartitionGroup = (robotID: string, nextGroup: PartitionGroup) => {
+        setPartitionDraft((previous) => {
+            if (previous[robotID] === nextGroup) {
+                return previous;
+            }
+            return {
+                ...previous,
+                [robotID]: nextGroup,
+            };
+        });
+        setPartitionError(null);
+        setLastPartitionAppliedCount(null);
+    };
+
+    const applyPartitioning = () => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || partitionPending || knownRobotIDs.length === 0) return;
+
+        const assignments = knownRobotIDs.map((robotID) => ({
+            robot_id: robotID,
+            group_index: partitionDraft[robotID] ?? 1,
+        }));
+
+        setPartitionPending(true);
+        setPartitionError(null);
+        setLastPartitionAppliedCount(null);
+
+        try {
+            ws.send(JSON.stringify({ type: 'set_partition', assignments }));
+        } catch (error) {
+            setPartitionPending(false);
+            setPartitionError('Failed to send partition command');
+            console.error('Error sending partition command', error);
         }
     };
 
@@ -283,6 +462,30 @@ function App() {
             });
         }
     };
+
+    const statusLabel = (status: number) => {
+        if (status === 2) return 'Confirmed';
+        if (status === 1) return 'Pending confirmation';
+        return 'Unknown';
+    };
+
+    const statusClassName = (status: number) => {
+        if (status === 2) return 'confirmed';
+        if (status === 1) return 'pending';
+        return 'unknown';
+    };
+
+    const sortedLeaderEntries = (leaderLog.entries ?? []).slice().sort((a, b) => b.index - a.index);
+    const visibleLeaderEntries = hideLeaderPings
+        ? sortedLeaderEntries.filter((entry) => !isLeaderPingEntry(entry))
+        : sortedLeaderEntries;
+
+    const isLeaderLogTabActive = activeTool === 'leader-log';
+    const isRobotKillerTabActive = activeTool === 'robot-killer';
+    const isPartioningTabActive = activeTool === 'partioning';
+    const groupOneCount = knownRobotIDs.filter((robotID) => (partitionDraft[robotID] ?? 1) === 1).length;
+    const groupTwoCount = knownRobotIDs.filter((robotID) => (partitionDraft[robotID] ?? 1) === 2).length;
+    const groupThreeCount = knownRobotIDs.filter((robotID) => (partitionDraft[robotID] ?? 1) === 3).length;
 
     const updateCommunicationOverlay = (robots: Robot[]) => {
         const graphics = commGraphicsRef.current;
@@ -407,7 +610,11 @@ function App() {
             sprite.y = robot.y * scaleY;
             sprite.rotation = robot.is_leader ? 0 : robot.heading;
 
-            label.text = robot.id.slice(0, 5);
+            const idPrefix = robot.id.slice(0, 5);
+            const term = robot.raft_term ?? 0;
+            const logIndex = robot.raft_log_index ?? -1;
+            const commitIndex = robot.commit_index ?? -1;
+            label.text = `${idPrefix} T:${term} I:${logIndex} C:${commitIndex}`;
             label.x = sprite.x + 11;
             label.y = sprite.y + 11;
         });
@@ -449,19 +656,182 @@ function App() {
 
             <main className="main-content">
                 <aside className="sidebar glass">
-                    <h2>Telemetry</h2>
-                    <div className="stat-box">
-                        <span className="label">Active Robots</span>
-                        <span className="value">{robotCount}</span>
+                    <div className="sidebar-tabs" role="tablist" aria-label="Visualiser tools">
+                        <button
+                            type="button"
+                            className={`sidebar-tab ${isLeaderLogTabActive ? 'active' : ''}`}
+                            onClick={() => setActiveTool('leader-log')}
+                            role="tab"
+                            aria-selected={isLeaderLogTabActive}
+                        >
+                            Leader Log
+                        </button>
+                        <button
+                            type="button"
+                            className={`sidebar-tab ${isRobotKillerTabActive ? 'active' : ''}`}
+                            onClick={() => setActiveTool('robot-killer')}
+                            role="tab"
+                            aria-selected={isRobotKillerTabActive}
+                        >
+                            Kill
+                        </button>
+                        <button
+                            type="button"
+                            className={`sidebar-tab ${isPartioningTabActive ? 'active' : ''}`}
+                            onClick={() => setActiveTool('partioning')}
+                            role="tab"
+                            aria-selected={isPartioningTabActive}
+                        >
+                            Partitioning
+                        </button>
                     </div>
-                    <div className="stat-box">
-                        <span className="label">Environment</span>
-                        <span className="value">{env.width} x {env.height}</span>
+
+                    <div className="sidebar-panel" role="tabpanel">
+                        {isLeaderLogTabActive && (
+                            <section className="tool-panel tool-panel-scrollable">
+                                <label className="leader-log-filter">
+                                    <input
+                                        type="checkbox"
+                                        checked={hideLeaderPings}
+                                        onChange={(event) => setHideLeaderPings(event.target.checked)}
+                                    />
+                                    <span>Hide leader ping entries</span>
+                                </label>
+                                <div className="leader-summary">
+                                    <div className="summary-row">
+                                        <span className="label">Current Leader</span>
+                                        <span className="value">{leaderLog.current_leader || 'None'}</span>
+                                    </div>
+                                    <div className="summary-row">
+                                        <span className="label">Current Term</span>
+                                        <span className="value">{leaderLog.current_term ?? 0}</span>
+                                    </div>
+                                </div>
+
+                                <div className="log-list" role="list" aria-label="Leader raft log entries">
+                                    {visibleLeaderEntries.map((entry) => (
+                                        <article className="log-entry" key={`${entry.term}-${entry.index}-${entry.timestamp_unix_ms}`} role="listitem">
+                                            <div className="log-entry-top">
+                                                <span className="log-meta">Leader {entry.current_leader || leaderLog.current_leader || 'unknown'}</span>
+                                                <span className={`log-status ${statusClassName(entry.status)}`}>{statusLabel(entry.status)}</span>
+                                            </div>
+                                            <div className="log-grid">
+                                                <span>Term: {entry.term}</span>
+                                                <span>Index: {entry.index}</span>
+                                            </div>
+                                            <div className="log-message">{entry.message || '(empty message)'}</div>
+                                        </article>
+                                    ))}
+                                    {visibleLeaderEntries.length === 0 && (
+                                        <div className="log-empty">
+                                            {hideLeaderPings && (leaderLog.entries ?? []).length > 0
+                                                ? 'No leader log entries match the current filter.'
+                                                : 'No leader log entries yet.'}
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+                        )}
+
+                        {isRobotKillerTabActive && (
+                            <section className="tool-panel">
+                                <div className="kill-robot-section">
+                                    <div className="kill-action-row">
+                                        <button
+                                            type="button"
+                                            className="kill-random-button"
+                                            onClick={killRobot}
+                                            disabled={!connected || killPending || robotCount === 0}
+                                        >
+                                            {killPending ? 'Killing…' : 'Kill Random'}
+                                        </button>
+                                    </div>
+                                    <div className="kill-action-row">
+                                        <input
+                                            type="text"
+                                            className="kill-id-input"
+                                            value={killTargetId}
+                                            onChange={(event) => setKillTargetId(event.target.value.slice(0, 5))}
+                                            placeholder="Robot ID"
+                                            maxLength={5}
+                                            inputMode="text"
+                                            autoComplete="off"
+                                            aria-label="Robot ID prefix to kill"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="kill-target-button"
+                                            onClick={killRobotById}
+                                            disabled={!connected || killPending || killTargetId.trim().length !== 5}
+                                        >
+                                            Kill
+                                        </button>
+                                    </div>
+                                    {lastKilledId && (
+                                        <div className="kill-robot-feedback" role="status">
+                                            Removed <span className="mono">{lastKilledId}</span> from simulation
+                                        </div>
+                                    )}
+                                    {killError && <div className="control-error">{killError}</div>}
+                                </div>
+                            </section>
+                        )}
+
+                        {isPartioningTabActive && (
+                            <section className="tool-panel tool-panel-scrollable">
+                                <div className="partition-section">
+                                    <div className="partition-summary" aria-label="Partition group totals">
+                                        <span>G1: {groupOneCount}</span>
+                                        <span>G2: {groupTwoCount}</span>
+                                        <span>G3: {groupThreeCount}</span>
+                                    </div>
+
+                                    <div className="partition-list" role="list" aria-label="Robot partition assignments">
+                                        {knownRobotIDs.map((robotID) => (
+                                            <div className="partition-row" role="listitem" key={robotID}>
+                                                <span className="partition-robot-id mono">{robotID.slice(0, 5)}</span>
+                                                <label className="partition-select-label" htmlFor={`partition-${robotID}`}>
+                                                    Group
+                                                </label>
+                                                <select
+                                                    id={`partition-${robotID}`}
+                                                    className="partition-select"
+                                                    value={partitionDraft[robotID] ?? 1}
+                                                    onChange={(event) => updateRobotPartitionGroup(robotID, Number(event.target.value) as PartitionGroup)}
+                                                    disabled={partitionPending}
+                                                >
+                                                    <option value={1}>1</option>
+                                                    <option value={2}>2</option>
+                                                    <option value={3}>3</option>
+                                                </select>
+                                            </div>
+                                        ))}
+                                        {knownRobotIDs.length === 0 && (
+                                            <div className="log-empty">No robots available.</div>
+                                        )}
+                                    </div>
+
+                                    <div className="partition-footer">
+                                        <button
+                                            type="button"
+                                            className="kill-target-button"
+                                            onClick={applyPartitioning}
+                                            disabled={!connected || partitionPending || knownRobotIDs.length === 0}
+                                        >
+                                            {partitionPending ? 'Applying…' : 'Implement'}
+                                        </button>
+                                        {lastPartitionAppliedCount !== null && (
+                                            <div className="kill-robot-feedback" role="status">
+                                                Applied grouping for {lastPartitionAppliedCount} robots
+                                            </div>
+                                        )}
+                                        {partitionError && <div className="control-error">{partitionError}</div>}
+                                    </div>
+                                </div>
+                            </section>
+                        )}
                     </div>
-                    <div className="stat-box">
-                        <span className="label">Simulation</span>
-                        <span className={`value ${isPaused ? 'paused-state' : ''}`}>{isPaused ? 'Paused' : 'Running'}</span>
-                    </div>
+
                     {pauseError && <div className="control-error">{pauseError}</div>}
                 </aside>
 

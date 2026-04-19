@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// Objective: verify a direct neighbour is recorded as a one-hop route.
+// Expected output: the route exists with hop count 1 and next hop equal to the neighbour.
 func TestRoutingTableDirectNeighbour(t *testing.T) {
 	rt := NewRoutingTable("A")
 
@@ -21,6 +23,8 @@ func TestRoutingTableDirectNeighbour(t *testing.T) {
 	}
 }
 
+// Objective: verify merged advertisements expand routes through the advertising neighbour.
+// Expected output: B, C, and D are reachable with hop counts 1, 2, and 3 respectively via B.
 func TestRoutingTableMergeAdvertisement(t *testing.T) {
 	rt := NewRoutingTable("A")
 
@@ -66,6 +70,8 @@ func TestRoutingTableMergeAdvertisement(t *testing.T) {
 	}
 }
 
+// Objective: verify a shorter advertised path replaces a longer route.
+// Expected output: D is first reached via B in 3 hops, then updated to 2 hops via E.
 func TestRoutingTableShorterPathWins(t *testing.T) {
 	rt := NewRoutingTable("A")
 
@@ -97,6 +103,8 @@ func TestRoutingTableShorterPathWins(t *testing.T) {
 	}
 }
 
+// Objective: verify expired routing entries are pruned.
+// Expected output: the route table drops all aged entries after pruning.
 func TestRoutingTablePruneExpired(t *testing.T) {
 	rt := NewRoutingTable("A")
 
@@ -121,6 +129,8 @@ func TestRoutingTablePruneExpired(t *testing.T) {
 	}
 }
 
+// Objective: verify advertisements include self and all reachable peers with the expected hop counts.
+// Expected output: the advertisement reports A=0, B=1, and C=2.
 func TestRoutingTableBuildAdvertisement(t *testing.T) {
 	rt := NewRoutingTable("A")
 	rt.RecordDirectNeighbour("B")
@@ -140,6 +150,8 @@ func TestRoutingTableBuildAdvertisement(t *testing.T) {
 	}
 }
 
+// Objective: verify self references are ignored in routing updates.
+// Expected output: recording or advertising self does not create a route to A.
 func TestRoutingTableSelfIDIgnored(t *testing.T) {
 	rt := NewRoutingTable("A")
 
@@ -156,6 +168,8 @@ func TestRoutingTableSelfIDIgnored(t *testing.T) {
 	}
 }
 
+// Objective: verify the full reachable set includes direct and indirect peers.
+// Expected output: the reachable set contains B, C, D, and E.
 func TestRoutingTableGetAllReachable(t *testing.T) {
 	rt := NewRoutingTable("A")
 	rt.RecordDirectNeighbour("B")

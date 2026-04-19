@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// Fo1: Follower lag prevLogIndex mismatch rejection
+// Objective: verify a lagging follower rejects an AppendEntries request with a mismatched prevLogIndex.
+// Expected output: the append response is unsuccessful.
 func TestRaftFollowerLagRejection(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -28,7 +29,8 @@ func TestRaftFollowerLagRejection(t *testing.T) {
 	}
 }
 
-// Fo2: Follower missing logs catch-up and commitIndex update
+// Objective: verify a lagging follower catches up replicated logs and advances commitIndex on heartbeat.
+// Expected output: r2 receives both entries and advances commitIndex to 1.
 func TestRaftFollowerCatchupAndCommitUpdate(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -73,7 +75,8 @@ func TestRaftFollowerCatchupAndCommitUpdate(t *testing.T) {
 	}
 }
 
-// I1: Heartbeat idempotency
+// Objective: verify repeated empty heartbeats do not duplicate log entries.
+// Expected output: every heartbeat succeeds and the follower log length stays unchanged.
 func TestRaftFollowerHeartbeatIdempotency(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -107,7 +110,8 @@ func TestRaftFollowerHeartbeatIdempotency(t *testing.T) {
 	r2.mu.Unlock()
 }
 
-// I2: Duplicate AppendEntries idempotency
+// Objective: verify duplicate AppendEntries retries are idempotent.
+// Expected output: both appends succeed but the follower still stores exactly one log entry.
 func TestRaftFollowerDuplicateAppendIdempotency(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]

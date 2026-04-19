@@ -84,12 +84,14 @@ func main() {
 	defer conn.Close()
 
 	client := pb.NewRobotServiceClient(conn)
+	raftObserverClient := pb.NewRaftObserverServiceClient(conn)
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
 	robot := NewRobot(*robotID, client)
+	robot.SetRaftObserverClient(raftObserverClient)
 
 	// Start Peer gRPC server
 	lis, err := net.Listen("tcp", ":50052")

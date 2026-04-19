@@ -78,7 +78,8 @@ func gossipRequest(sender string, timestamp int, entries ...*LandmarkEntry) *pb.
 	}
 }
 
-// confirms that receiving peer gossip from 3 different reporters verifies the casualty on 3rd report
+// Objective: verify the knowledge store tracks casualty reports until quorum and only verifies after commit.
+// Expected output: the first two reports stay unverified, the third reaches quorum, and verification happens after ApplyCasualtyVerified.
 func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	store := NewKnowledgeStore()
 	loc := Location{X: 12.5, Y: 42.25}
@@ -135,8 +136,8 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 }
 
-// checks that receiving peer gossip from 3 different reporters only reaches quorum
-// and does not mark verified before raft commit apply.
+// Objective: verify peer sync reaches casualty quorum without marking the entry verified before commit.
+// Expected output: the third peer report triggers quorum, but the entry stays unverified until raft apply runs.
 func TestRobotOnPeerSyncSignalsQuorumButStaysUnverified(t *testing.T) {
 	r := newTestRobot(t, "receiver", &fakeRobotServiceClient{})
 	id := LandmarkID("casualty-2")
@@ -176,6 +177,8 @@ func TestRobotOnPeerSyncSignalsQuorumButStaysUnverified(t *testing.T) {
 	}
 }
 
+// Objective: verify relayed gossip does not turn the relay peer into an eyewitness reporter.
+// Expected output: only the original eyewitness remains in the reporters set.
 func TestRobotOnPeerSyncPreservesEyewitnessProvenanceAcrossRelay(t *testing.T) {
 	r := newTestRobot(t, "receiver", &fakeRobotServiceClient{})
 	id := LandmarkID("casualty-relay")
@@ -193,6 +196,8 @@ func TestRobotOnPeerSyncPreservesEyewitnessProvenanceAcrossRelay(t *testing.T) {
 	}
 }
 
+// Objective: verify the first sensor sighting is recorded as a landmark without movement.
+// Expected output: the landmark is stored with the sensor location, remains unverified, and no move request is issued.
 func TestRobotTickRecordsFirstLandmarkSighting(t *testing.T) {
 	client := &fakeRobotServiceClient{
 		heartbeatResp: &pb.HeartbeatResponse{Success: true, X: 150, Y: 160, Heading: 0.5},
@@ -231,6 +236,8 @@ func TestRobotTickRecordsFirstLandmarkSighting(t *testing.T) {
 	}
 }
 
+// Objective: verify movement targets an unverified casualty and stops targeting it after verification.
+// Expected output: the robot sends move requests toward the casualty before verification and chooses a different target after commit.
 func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *testing.T) {
 	rand.Seed(1)
 	client := &fakeRobotServiceClient{}
@@ -288,6 +295,8 @@ func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *te
 	}
 }
 
+// Objective: verify gossip deltas are only sent when a peer has new entries to receive.
+// Expected output: the first discovery reaches all peers, the second empty round sends nothing, and a later discovery is gossiped again.
 func TestGossipEngineDeltaSkipsPeersWithoutNewEntries(t *testing.T) {
 	robot := &Robot{
 		ID:                "scout",
@@ -348,6 +357,8 @@ func TestGossipEngineDeltaSkipsPeersWithoutNewEntries(t *testing.T) {
 	}
 }
 
+// Objective: verify the gossip engine prioritizes casualty entries when bandwidth is capped.
+// Expected output: one casualty entry is sent first, and no extra send occurs without new data.
 func TestGossipEngineDeltaPrioritizesCasualtiesWithinBandwidthCap(t *testing.T) {
 	robot := &Robot{
 		ID:                "scout",
@@ -391,6 +402,8 @@ func TestGossipEngineDeltaPrioritizesCasualtiesWithinBandwidthCap(t *testing.T) 
 	}
 }
 
+// Objective: verify received gossip becomes the local source for future delta propagation.
+// Expected output: the merged entry is forwarded once to the peer and not resent without new data.
 func TestGossipEngineOnReceiveMakesRobotIndependentDeltaSource(t *testing.T) {
 	robot := &Robot{
 		ID:                "robot-2",

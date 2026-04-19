@@ -4,7 +4,8 @@ import (
 	"testing"
 )
 
-// T1: Leader demotion on higher term response
+// Objective: verify a leader demotes when a response reveals a higher term.
+// Expected output: r1 becomes follower and updates its term to match r2.
 func TestRaftTermSafetyLeaderDemotionOnResponse(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -41,7 +42,8 @@ func TestRaftTermSafetyLeaderDemotionOnResponse(t *testing.T) {
 	}
 }
 
-// T2: Leader demotion on higher term VoteRequest
+// Objective: verify a leader demotes when receiving a higher-term vote request.
+// Expected output: r1 grants the vote, becomes follower, and adopts the newer term.
 func TestRaftTermSafetyLeaderDemotionOnVoteRequest(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -71,7 +73,8 @@ func TestRaftTermSafetyLeaderDemotionOnVoteRequest(t *testing.T) {
 	}
 }
 
-// T3: Rejection of lower term AppendEntries
+// Objective: verify a node rejects AppendEntries messages from a lower-term leader.
+// Expected output: the append response is unsuccessful and includes the follower's current term.
 func TestRaftTermSafetyRejectLowerTermAppend(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2 := robots[0], robots[1]
@@ -97,7 +100,8 @@ func TestRaftTermSafetyRejectLowerTermAppend(t *testing.T) {
 	}
 }
 
-// T4: Rejection of lower term VoteRequest
+// Objective: verify a node rejects vote requests from a lower-term candidate.
+// Expected output: the vote is denied and the response includes the follower's current term.
 func TestRaftTermSafetyRejectLowerTermVote(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2 := robots[0], robots[1]

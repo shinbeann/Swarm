@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"math"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -23,12 +24,12 @@ var (
 )
 
 const (
-	robotSpeed         = 20.0
-	simTickMs          = 30
-	simDt              = float64(simTickMs) / 1000.0
-	discoveryRadius    = 100.0  // must be within this distance to detect a landmark
+	robotSpeed             = 20.0
+	simTickMs              = 30
+	simDt                  = float64(simTickMs) / 1000.0
+	discoveryRadius        = 100.0 // must be within this distance to detect a landmark
 	landmarkSensorCooldown = 2 * time.Second
-	communicationRange = 250.0 // source of truth for physical wireless reachability
+	communicationRange     = 250.0 // source of truth for physical wireless reachability
 )
 
 // -------------------------------------------------------------------------
@@ -65,6 +66,7 @@ type RobotState struct {
 
 type server struct {
 	pb.UnimplementedRobotServiceServer
+	pb.UnimplementedRaftObserverServiceServer
 	pb.UnimplementedVisualiserServiceServer
 
 	mu     sync.RWMutex
@@ -72,8 +74,11 @@ type server struct {
 	walls  []*pb.Obstacle
 	paused bool
 
-	landmarks                 map[LandmarkID]*WorldLandmark
-	lastLandmarkSensorReport   map[string]map[LandmarkID]time.Time
+	landmarks                map[LandmarkID]*WorldLandmark
+	lastLandmarkSensorReport map[string]map[LandmarkID]time.Time
+	leaderLogSnapshots       map[string]*pb.RaftLogSnapshotRequest
+	terminatedRobotIDs       map[string]struct{}
+	partitionGroupByRobotID  map[string]uint32
 }
 
 // -------------------------------------------------------------------------
@@ -89,9 +94,12 @@ func newServer() *server {
 			{Id: "wall-left", X: -10, Y: 0, Width: 10, Height: 1000},
 			{Id: "wall-right", X: 1000, Y: 0, Width: 10, Height: 1000},
 		},
-		landmarks:               make(map[LandmarkID]*WorldLandmark),
+		landmarks:                make(map[LandmarkID]*WorldLandmark),
 		lastLandmarkSensorReport: make(map[string]map[LandmarkID]time.Time),
-		paused:                  false,
+		leaderLogSnapshots:       make(map[string]*pb.RaftLogSnapshotRequest),
+		terminatedRobotIDs:       make(map[string]struct{}),
+		partitionGroupByRobotID:  make(map[string]uint32),
+		paused:                   false,
 	}
 	s.spawnLandmarks()
 	return s
@@ -117,8 +125,8 @@ func (s *server) spawnLandmarks() {
 
 	for _, f := range fixed {
 		s.landmarks[f.id] = &WorldLandmark{
-			ID:   f.id,
-			Type: f.t,
+			ID:       f.id,
+			Type:     f.t,
 			Location: Location{X: f.x, Y: f.y},
 		}
 	}
@@ -134,6 +142,10 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if _, banned := s.terminatedRobotIDs[req.GetRobotId()]; banned {
+		return &pb.HeartbeatResponse{Success: false}, nil
+	}
+
 	state, exists := s.robots[req.GetRobotId()]
 	if !exists {
 		state = &RobotState{
@@ -145,11 +157,20 @@ func (s *server) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*
 			},
 		}
 		s.robots[req.GetRobotId()] = state
+		s.partitionGroupByRobotID[req.GetRobotId()] = 1
 		log.Printf("Robot %s registered at (%.1f, %.1f)", req.GetRobotId(), state.Info.X, state.Info.Y)
+	} else {
+		_, tracked := s.partitionGroupByRobotID[req.GetRobotId()]
+		if !tracked {
+			s.partitionGroupByRobotID[req.GetRobotId()] = 1
+		}
 	}
 
 	state.LastSeen = time.Now()
 	state.LastKnownLeaderID = req.GetKnownLeaderId()
+	state.Info.RaftTerm = req.GetCurrentTerm()
+	state.Info.RaftLogIndex = req.GetLastLogIndex()
+	state.Info.CommitIndex = req.GetCommitIndex()
 
 	return &pb.HeartbeatResponse{
 		Success: true,
@@ -256,6 +277,9 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 		if id == reqRobotID {
 			continue
 		}
+		if !s.samePartitionLocked(reqRobotID, id) {
+			continue
+		}
 		distX := reqState.Info.X - state.Info.X
 		distY := reqState.Info.Y - state.Info.Y
 		distance := math.Sqrt(distX*distX + distY*distY)
@@ -272,6 +296,43 @@ func (s *server) GetNetworkData(ctx context.Context, req *pb.NetworkRequest) (*p
 	}
 
 	return &pb.NetworkResponse{NetworkConditions: conditions, SimulationPaused: s.paused}, nil
+}
+
+func cloneRaftSnapshot(req *pb.RaftLogSnapshotRequest) *pb.RaftLogSnapshotRequest {
+	if req == nil {
+		return nil
+	}
+
+	clonedEntries := make([]*pb.RaftLogSnapshotEntry, 0, len(req.GetEntries()))
+	for _, entry := range req.GetEntries() {
+		clonedEntries = append(clonedEntries, &pb.RaftLogSnapshotEntry{
+			Term:            entry.GetTerm(),
+			Index:           entry.GetIndex(),
+			LogType:         entry.GetLogType(),
+			Message:         entry.GetMessage(),
+			TimestampUnixMs: entry.GetTimestampUnixMs(),
+		})
+	}
+
+	return &pb.RaftLogSnapshotRequest{
+		LeaderId:    req.GetLeaderId(),
+		CurrentTerm: req.GetCurrentTerm(),
+		CommitIndex: req.GetCommitIndex(),
+		Entries:     clonedEntries,
+	}
+}
+
+// Receive raft log snapshots from the leader robot client and store them for serving to the Visualiser.
+func (s *server) PublishRaftLogSnapshot(ctx context.Context, req *pb.RaftLogSnapshotRequest) (*pb.RaftLogSnapshotResponse, error) {
+	if req == nil || req.GetLeaderId() == "" {
+		return &pb.RaftLogSnapshotResponse{Accepted: false}, nil
+	}
+
+	s.mu.Lock()
+	s.leaderLogSnapshots[req.GetLeaderId()] = cloneRaftSnapshot(req)
+	s.mu.Unlock()
+
+	return &pb.RaftLogSnapshotResponse{Accepted: true}, nil
 }
 
 func (s *server) resolveLeaderIDLocked() string {
@@ -309,6 +370,9 @@ func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) 
 		if candidateID == sourceID {
 			continue
 		}
+		if !s.samePartitionLocked(sourceID, candidateID) {
+			continue
+		}
 
 		candidateState := s.robots[candidateID]
 		distX := sourceState.Info.X - candidateState.Info.X
@@ -319,6 +383,21 @@ func (s *server) inRangePeerIDsLocked(sourceID string, sortedRobotIDs []string) 
 	}
 
 	return peers
+}
+
+func (s *server) partitionGroupLocked(robotID string) uint32 {
+	if robotID == "" {
+		return 1
+	}
+	group, ok := s.partitionGroupByRobotID[robotID]
+	if !ok || group < 1 || group > 3 {
+		return 1
+	}
+	return group
+}
+
+func (s *server) samePartitionLocked(leftRobotID string, rightRobotID string) bool {
+	return s.partitionGroupLocked(leftRobotID) == s.partitionGroupLocked(rightRobotID)
 }
 
 // -------------------------------------------------------------------------
@@ -366,6 +445,39 @@ func (s *server) SetSimulationPause(ctx context.Context, req *pb.SimulationPause
 	}, nil
 }
 
+func (s *server) SetNetworkPartition(ctx context.Context, req *pb.NetworkPartitionRequest) (*pb.NetworkPartitionResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	assignments := req.GetAssignments()
+	if len(assignments) == 0 {
+		return &pb.NetworkPartitionResponse{Success: false, Error: "no partition assignments provided"}, nil
+	}
+
+	for _, assignment := range assignments {
+		robotID := assignment.GetRobotId()
+		if robotID == "" {
+			return &pb.NetworkPartitionResponse{Success: false, Error: "partition assignment has empty robot id"}, nil
+		}
+		if _, exists := s.robots[robotID]; !exists {
+			return &pb.NetworkPartitionResponse{Success: false, Error: "partition assignment references unknown robot id"}, nil
+		}
+		groupIndex := assignment.GetGroupIndex()
+		if groupIndex < 1 || groupIndex > 3 {
+			return &pb.NetworkPartitionResponse{Success: false, Error: "group index must be between 1 and 3"}, nil
+		}
+	}
+
+	for _, assignment := range assignments {
+		s.partitionGroupByRobotID[assignment.GetRobotId()] = assignment.GetGroupIndex()
+	}
+
+	return &pb.NetworkPartitionResponse{
+		Success:      true,
+		AppliedCount: uint32(len(assignments)),
+	}, nil
+}
+
 func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*pb.RobotDataResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -389,9 +501,53 @@ func (s *server) GetRobotData(ctx context.Context, req *pb.RobotDataRequest) (*p
 			IsLeader:           id == leaderID,
 			CommunicationRange: communicationRange,
 			InRangePeerIds:     s.inRangePeerIDsLocked(id, sortedRobotIDs),
+			RaftTerm:           state.Info.RaftTerm,
+			RaftLogIndex:       state.Info.RaftLogIndex,
+			CommitIndex:        state.Info.CommitIndex,
 		})
 	}
 	return &pb.RobotDataResponse{Robots: rbts}, nil
+}
+
+func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*pb.KillResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	victim := req.GetRobotId()
+	if victim != "" {
+		if _, exists := s.robots[victim]; !exists {
+			return &pb.KillResponse{
+				Success: false,
+				Error:   "robot not found",
+			}, nil
+		}
+	} else {
+		if len(s.robots) == 0 {
+			return &pb.KillResponse{
+				Success: false,
+				Error:   "no robots in simulation",
+			}, nil
+		}
+
+		ids := make([]string, 0, len(s.robots))
+		for id := range s.robots {
+			ids = append(ids, id)
+		}
+		victim = ids[rand.Intn(len(ids))]
+	}
+
+	delete(s.robots, victim)
+	delete(s.leaderLogSnapshots, victim)
+	delete(s.lastLandmarkSensorReport, victim)
+	delete(s.partitionGroupByRobotID, victim)
+	s.terminatedRobotIDs[victim] = struct{}{}
+
+	log.Printf("[world] kill requested: removed robot %s from simulation", victim)
+
+	return &pb.KillResponse{
+		Success:       true,
+		KilledRobotId: victim,
+	}, nil
 }
 
 // -------------------------------------------------------------------------
@@ -440,7 +596,6 @@ func (s *server) runSimTick() {
 }
 
 // runCleanupTick removes robots that have stopped heartbeating.
-// Identical to your original — no changes needed.
 func (s *server) runCleanupTick() {
 	ticker := time.NewTicker(2 * time.Second)
 	for range ticker.C {
@@ -450,6 +605,8 @@ func (s *server) runCleanupTick() {
 			if now.Sub(state.LastSeen) > 5*time.Second {
 				log.Printf("Robot %s timed out, removing from world", id)
 				delete(s.robots, id)
+				delete(s.leaderLogSnapshots, id)
+				delete(s.partitionGroupByRobotID, id)
 			}
 		}
 		s.mu.Unlock()
@@ -477,6 +634,7 @@ func main() {
 	go srv.runCleanupTick()
 
 	pb.RegisterRobotServiceServer(grpcServer, srv)
+	pb.RegisterRaftObserverServiceServer(grpcServer, srv)
 	pb.RegisterVisualiserServiceServer(grpcServer, srv)
 	reflection.Register(grpcServer)
 
@@ -492,4 +650,46 @@ func main() {
 
 	log.Println("Shutting down World Engine...")
 	grpcServer.GracefulStop()
+}
+
+// Implement visualiser RPC to serve raft log snapshots to the Visualiser UI for display on the timeline.
+func (s *server) GetLeaderLog(ctx context.Context, req *pb.LeaderLogRequest) (*pb.LeaderLogResponse, error) {
+	s.mu.RLock()
+	leaderID := s.resolveLeaderIDLocked()
+	// clone not strictly necessary since we're only reading
+	snapshot := cloneRaftSnapshot(s.leaderLogSnapshots[leaderID])
+	s.mu.RUnlock()
+
+	if leaderID == "" {
+		return &pb.LeaderLogResponse{}, nil
+	}
+
+	resp := &pb.LeaderLogResponse{
+		CurrentLeader: leaderID,
+	}
+
+	if snapshot == nil {
+		return resp, nil
+	}
+
+	resp.CurrentTerm = snapshot.GetCurrentTerm()
+	entries := make([]*pb.LeaderLogEntry, 0, len(snapshot.GetEntries()))
+	for _, entry := range snapshot.GetEntries() {
+		status := pb.LeaderLogStatus_LEADER_LOG_STATUS_PENDING_CONFIRMATION
+		if entry.GetIndex() <= snapshot.GetCommitIndex() {
+			status = pb.LeaderLogStatus_LEADER_LOG_STATUS_CONFIRMED
+		}
+
+		entries = append(entries, &pb.LeaderLogEntry{
+			CurrentLeader:   leaderID,
+			Term:            entry.GetTerm(),
+			Index:           entry.GetIndex(),
+			Message:         entry.GetMessage(),
+			Status:          status,
+			TimestampUnixMs: entry.GetTimestampUnixMs(),
+		})
+	}
+
+	resp.Entries = entries
+	return resp, nil
 }

@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -50,20 +51,17 @@ type Robot struct {
 	Y       float64
 	Heading float64
 
-	Client   pb.RobotServiceClient
-	Clock    *LamportClock
-	lastSync time.Time
-	paused   bool
+	Client       pb.RobotServiceClient
+	RaftObserver pb.RaftObserverServiceClient
+	Clock        *LamportClock
+	lastSync     time.Time
+	paused       bool
 
 	store               *KnowledgeStore
 	networkMu           sync.RWMutex
 	networkConditions   map[RobotID]*pb.NetworkData
 	gossip              *GossipEngine
 	discoveredLandmarks map[LandmarkID]bool
-
-	// casualtyVerifiedCh carries notifications from the KnowledgeStore to the Raft
-	// leader logic. Buffered so KS.Add() never blocks waiting for tickRaft.
-	casualtyVerifiedCh chan *LandmarkEntry
 
 	// Last sensed obstacle angle (radians from robot); only valid when nearObstacle is true
 	nearObstacle  bool
@@ -122,13 +120,15 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 	r.routingTable = NewRoutingTable(RobotID(id))
 	r.meshRouter = NewMeshRouter(r)
 
-	ch := make(chan *LandmarkEntry, 16)
-	r.casualtyVerifiedCh = ch
-	r.store.SetVerifiedCh(ch)
-
 	r.gossip = NewGossipEngine(r, r.sendGossipMessage)
 	r.gossip.Start()
 	return r
+}
+
+func (r *Robot) SetRaftObserverClient(client pb.RaftObserverServiceClient) {
+	r.mu.Lock()
+	r.RaftObserver = client
+	r.mu.Unlock()
 }
 
 func (r *Robot) Stop() {
@@ -165,6 +165,13 @@ func (r *Robot) Run(ctx context.Context) {
 	}
 }
 
+func (r *Robot) lastRaftLogIndexLocked() int64 {
+	if len(r.raftLog) == 0 {
+		return -1
+	}
+	return r.raftLog[len(r.raftLog)-1].Index
+}
+
 func (r *Robot) tick(ctx context.Context) {
 	r.Clock.Tick()
 
@@ -173,6 +180,9 @@ func (r *Robot) tick(ctx context.Context) {
 	currentX := r.X
 	currentY := r.Y
 	currentHeading := r.Heading
+	currentTerm := r.raftTerm
+	lastLogIndex := r.lastRaftLogIndexLocked()
+	commitIndex := r.commitIndex
 	r.mu.Unlock()
 
 	// Heartbeat — WorldEngine returns the canonical position
@@ -182,6 +192,9 @@ func (r *Robot) tick(ctx context.Context) {
 		Y:             currentY,
 		Heading:       currentHeading,
 		KnownLeaderId: knownLeaderID,
+		CurrentTerm:   currentTerm,
+		LastLogIndex:  lastLogIndex,
+		CommitIndex:   commitIndex,
 	})
 	if err != nil {
 		log.Printf("worldheartbeat error: %v", err)
@@ -192,6 +205,10 @@ func (r *Robot) tick(ctx context.Context) {
 		r.Y = heartbeatResp.GetY()
 		r.Heading = heartbeatResp.GetHeading()
 		r.mu.Unlock()
+	} else if heartbeatResp != nil && !heartbeatResp.GetSuccess() {
+		log.Printf("world rejected heartbeat for %s — shutting down (removed from simulation)", r.ID)
+		r.Stop()
+		os.Exit(0)
 	}
 
 	r.refreshNetworkConditions(ctx) // getting new local network data regarding one-hop peers from world engine
@@ -212,7 +229,6 @@ func (r *Robot) tick(ctx context.Context) {
 	r.mu.Unlock()
 
 	for _, obj := range sensorResp.GetObjects() {
-
 
 		if obj.GetType() == "obstacle" {
 			distX := obj.GetX() - currentX
@@ -295,6 +311,68 @@ func (r *Robot) tickRaft(ctx context.Context) {
 	r.mu.Lock()
 	r.applyCommittedEntriesLocked()
 	r.mu.Unlock()
+
+	r.publishRaftSnapshot(ctx)
+}
+
+//helper function for publishRaftSnapshot
+func logMessageForSnapshot(entry RaftLogEntry) string {
+	switch entry.Type {
+	case "casualty_verified":
+		var casualty LandmarkEntry
+		if err := json.Unmarshal(entry.Payload, &casualty); err == nil {
+			return string(casualty.ID)
+		}
+		return string(entry.Payload)
+	case "leader_ping":
+		return string(entry.Payload)
+	default:
+		return string(entry.Payload)
+	}
+}
+
+// Sends the latest raft log entries to the RaftObserver (WorldEngine).
+// Only the leader sends snapshots
+// Called during each raft tick after applying committed entries
+func (r *Robot) publishRaftSnapshot(ctx context.Context) {
+	r.mu.Lock()
+	if r.raftState != raftLeader || r.RaftObserver == nil {
+		r.mu.Unlock()
+		return
+	}
+
+	const maxEntries = 120
+	start := 0
+	if len(r.raftLog) > maxEntries {
+		start = len(r.raftLog) - maxEntries
+	}
+
+	//RaftLogSnapshotEntry is defined by the proto file
+	entries := make([]*pb.RaftLogSnapshotEntry, 0, len(r.raftLog)-start)
+	for i := start; i < len(r.raftLog); i++ {
+		entry := r.raftLog[i]
+		entries = append(entries, &pb.RaftLogSnapshotEntry{
+			Term:            entry.Term,
+			Index:           entry.Index,
+			LogType:         entry.Type,
+			Message:         logMessageForSnapshot(entry),
+			TimestampUnixMs: entry.TimestampUnixMs,
+		})
+	}
+
+	// RaftLogSnapshotRequest is defined by the proto file; contains metadata about the snapshot and the log entries themselves
+	request := &pb.RaftLogSnapshotRequest{
+		LeaderId:    r.ID,
+		CurrentTerm: r.raftTerm,
+		CommitIndex: r.commitIndex,
+		Entries:     entries,
+	}
+	observer := r.RaftObserver
+	r.mu.Unlock()
+
+	if _, err := observer.PublishRaftLogSnapshot(ctx, request); err != nil {
+		log.Printf("[Raft] %s failed to publish raft snapshot: %v", r.ID, err)
+	}
 }
 
 // requestMovement picks a target position and asks the WorldEngine to move the robot there.
@@ -369,21 +447,21 @@ func (r *Robot) requestMovement(ctx context.Context) {
 // closestCasualty returns the entry from candidates that is nearest to this
 // robot's current position. Returns nil only if candidates is empty.
 func (r *Robot) closestCasualty(candidates []*LandmarkEntry) *LandmarkEntry {
-    if len(candidates) == 0 {
-        return nil
-    }
-    var closest *LandmarkEntry
-    minDist := math.MaxFloat64
-    for _, e := range candidates {
-        dx := e.Location.X - r.X
-        dy := e.Location.Y - r.Y
-        dist := math.Sqrt(dx*dx + dy*dy)
-        if dist < minDist {
-            minDist = dist
-            closest = e
-        }
-    }
-    return closest
+	if len(candidates) == 0 {
+		return nil
+	}
+	var closest *LandmarkEntry
+	minDist := math.MaxFloat64
+	for _, e := range candidates {
+		dx := e.Location.X - r.X
+		dy := e.Location.Y - r.Y
+		dist := math.Sqrt(dx*dx + dy*dy)
+		if dist < minDist {
+			minDist = dist
+			closest = e
+		}
+	}
+	return closest
 }
 
 func (r *Robot) sendGossipMessage(to RobotID, msg *GossipMessage) error {
@@ -480,7 +558,6 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 	now := time.Now()
 	state := r.raftState
 	if state == raftLeader {
-		r.maybeAppendLeaderPingLocked(now)
 		r.appendVerifiedCasualtiesLocked(now)
 	}
 	sendCandidateVotes := false
@@ -679,6 +756,7 @@ func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
 		return false
 	}
 
+	// Giving a bit of time between vote requests to allow for responses to come back and avoid spamming the network with requests when there are issues.
 	if !r.lastVoteRequestAt.IsZero() && now.Sub(r.lastVoteRequestAt) < raftCandidateVoteRetry {
 		return false
 	}
@@ -687,44 +765,54 @@ func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
 	return true
 }
 
-// appendVerifiedCasualtiesLocked checks the notification channel and appends a
-// casualty_verified log entry for each newly verified casualty.
+// appendVerifiedCasualtiesLocked scans the store for casualty entries that have
+// reached quorum and appends each one exactly once.
 // Must be called with r.mu held.
 func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 	if r.raftState != raftLeader {
-		// Drain the channel so it does not fill up on non-leader robots.
-		for {
-			select {
-			case <-r.casualtyVerifiedCh:
-			default:
-				return
-			}
+		return
+	}
+
+	for _, entry := range r.store.PendingCasualtyVerifications() {
+		if r.hasCasualtyVerificationLogLocked(entry.ID) {
+			continue
+		}
+
+		payload, err := json.Marshal(entry)
+		if err != nil {
+			log.Printf("[Raft] failed to marshal casualty_verified payload: %v", err)
+			continue
+		}
+		logEntry := RaftLogEntry{
+			Term:            r.raftTerm,
+			Index:           int64(len(r.raftLog)),
+			Type:            "casualty_verified",
+			Payload:         payload,
+			TimestampUnixMs: now.UnixMilli(),
+		}
+		r.raftLog = append(r.raftLog, logEntry)
+		r.matchIndex[r.ID] = logEntry.Index
+		log.Printf("[Raft] Leader %s appended casualty_verified for %s idx=%d term=%d",
+			r.ID, entry.ID, logEntry.Index, logEntry.Term)
+	}
+}
+
+func (r *Robot) hasCasualtyVerificationLogLocked(casualtyID LandmarkID) bool {
+	for _, entry := range r.raftLog {
+		if entry.Type != "casualty_verified" {
+			continue
+		}
+
+		var casualty LandmarkEntry
+		if err := json.Unmarshal(entry.Payload, &casualty); err != nil {
+			continue
+		}
+		if casualty.ID == casualtyID {
+			return true
 		}
 	}
 
-	for {
-		select {
-		case entry := <-r.casualtyVerifiedCh:
-			payload, err := json.Marshal(entry)
-			if err != nil {
-				log.Printf("[Raft] failed to marshal casualty_verified payload: %v", err)
-				continue
-			}
-			logEntry := RaftLogEntry{
-				Term:            r.raftTerm,
-				Index:           int64(len(r.raftLog)),
-				Type:            "casualty_verified",
-				Payload:         payload,
-				TimestampUnixMs: now.UnixMilli(),
-			}
-			r.raftLog = append(r.raftLog, logEntry)
-			r.matchIndex[r.ID] = logEntry.Index
-			log.Printf("[Raft] Leader %s appended casualty_verified for %s idx=%d term=%d",
-				r.ID, entry.ID, logEntry.Index, logEntry.Term)
-		default:
-			return
-		}
-	}
+	return false
 }
 
 // applyCommittedEntriesLocked applies newly committed log entries exactly once.
@@ -802,6 +890,7 @@ func (r *Robot) handleVoteResponse(peerID string, resp *pb.VoteResponse) {
 	}
 
 	if resp.GetTerm() > r.raftTerm {
+		// have to give up leadership attempt if it learns of a higher term
 		r.becomeFollowerLocked(resp.GetTerm(), "")
 		return
 	}
@@ -984,7 +1073,7 @@ func (r *Robot) becomeFollowerLocked(term int64, leaderID string) {
 	r.raftState = raftFollower
 	r.knownLeaderID = leaderID
 	r.votedFor = ""
-	r.lastVoteRequestAt = time.Time{}
+	r.lastVoteRequestAt = time.Time{} // resets to zero state
 	r.votesGranted = make(map[string]bool)
 	r.lastLeaderSeenAt = time.Now()
 	r.electionTimeout = randomElectionTimeout()

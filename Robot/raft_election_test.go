@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// E1: Basic stability test
+// Objective: verify a candidate can win a basic election and followers remain followers after heartbeat.
+// Expected output: r1 becomes leader and r4 stays follower with a recently updated lastLeaderSeenAt.
 func TestRaftElectionBasic(t *testing.T) {
 	robots := setupCluster(5)
 	r1, r2, r3, r4 := robots[0], robots[1], robots[2], robots[3]
@@ -49,7 +50,8 @@ func TestRaftElectionBasic(t *testing.T) {
 	}
 }
 
-// E2: Stale leader demotion
+// Objective: verify a stale leader steps down after seeing a higher term in an append response.
+// Expected output: r1 demotes to follower and updates its term to 2.
 func TestRaftStaleLeaderDemotion(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2 := robots[0], robots[1]
@@ -87,7 +89,8 @@ func TestRaftStaleLeaderDemotion(t *testing.T) {
 	}
 }
 
-// E3: Stale log rejection
+// Objective: verify a candidate with a stale log cannot win votes from up-to-date peers.
+// Expected output: r2 rejects the vote request and r1 does not become leader.
 func TestRaftElectionStaleLogRejection(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
@@ -114,7 +117,8 @@ func TestRaftElectionStaleLogRejection(t *testing.T) {
 	}
 }
 
-// E4: Split vote resolution
+// Objective: verify split votes leave no leader until a later term breaks the tie.
+// Expected output: r1 and r2 remain non-leaders in the split term, then r1 wins the next term.
 func TestRaftSplitVote(t *testing.T) {
 	robots := setupCluster(4)
 	r1, r2, r3, r4 := robots[0], robots[1], robots[2], robots[3]
@@ -157,7 +161,8 @@ func TestRaftSplitVote(t *testing.T) {
 	}
 }
 
-// E5: Candidate step-down on AppendEntries
+// Objective: verify a candidate steps down when it receives a valid heartbeat from the current leader.
+// Expected output: the append succeeds and r1 transitions from candidate to follower.
 func TestRaftCandidateStepDownOnAppendEntries(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2 := robots[0], robots[1]
@@ -187,7 +192,8 @@ func TestRaftCandidateStepDownOnAppendEntries(t *testing.T) {
 	}
 }
 
-// E6: Candidate step-down on higher-term VoteRequest
+// Objective: verify a candidate steps down on a higher-term vote request.
+// Expected output: r1 grants the vote, becomes follower, and adopts term 3.
 func TestRaftCandidateStepDownOnHigherTermVoteRequest(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2 := robots[0], robots[1]
@@ -218,7 +224,8 @@ func TestRaftCandidateStepDownOnHigherTermVoteRequest(t *testing.T) {
 	}
 }
 
-// E7: Double-vote prevention
+// Objective: verify a follower grants at most one vote per term.
+// Expected output: r3 grants the first vote request and rejects the second one for the same term.
 func TestRaftDoubleVotePrevention(t *testing.T) {
 	robots := setupCluster(3)
 	r1, r2, r3 := robots[0], robots[1], robots[2]
