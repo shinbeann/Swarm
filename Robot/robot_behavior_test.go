@@ -78,8 +78,8 @@ func gossipRequest(sender string, timestamp int, entries ...*LandmarkEntry) *pb.
 	}
 }
 
-// Objective: verify the knowledge store tracks casualty reports until quorum and only verifies after commit.
-// Expected output: the first two reports stay unverified, the third reaches quorum, and verification happens after ApplyCasualtyVerified.
+// Objective: verify the knowledge store tracks casualty reports until quorum and then commits them separately.
+// Expected output: the first two reports stay unverified, the third reaches quorum and becomes verified, and ApplyCasualtyVerified marks it committed.
 func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	store := NewKnowledgeStore()
 	loc := Location{X: 12.5, Y: 42.25}
@@ -114,17 +114,23 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 
 	entry = findEntry(t, store, id)
-	if entry.Verified {
-		t.Fatalf("expected casualty to stay unverified until raft commit is applied")
+	if !entry.Verified {
+		t.Fatalf("expected casualty to become verified on the third distinct report")
+	}
+	if entry.Committed {
+		t.Fatalf("expected casualty to remain uncommitted before raft apply")
 	}
 	if len(entry.Reporters) != 3 {
 		t.Fatalf("expected 3 reporters after third report, got %d", len(entry.Reporters))
 	}
 
-	store.ApplyCasualtyVerified(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("r1"): 1, RobotID("r2"): 2, RobotID("r3"): 3}})
+	store.ApplyCasualtyCommitted(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("r1"): 1, RobotID("r2"): 2, RobotID("r3"): 3}})
 	entry = findEntry(t, store, id)
 	if !entry.Verified {
-		t.Fatalf("expected casualty to be marked verified after committed raft apply")
+		t.Fatalf("expected casualty to stay verified after committed raft apply")
+	}
+	if !entry.Committed {
+		t.Fatalf("expected casualty to be marked committed after raft apply")
 	}
 
 	if verified := store.Add(id, LandmarkCasualty, loc, "r3", 4); verified {
@@ -136,9 +142,9 @@ func TestKnowledgeStoreVerificationLifecycle(t *testing.T) {
 	}
 }
 
-// Objective: verify peer sync reaches casualty quorum without marking the entry verified before commit.
-// Expected output: the third peer report triggers quorum, but the entry stays unverified until raft apply runs.
-func TestRobotOnPeerSyncSignalsQuorumButStaysUnverified(t *testing.T) {
+// Objective: verify peer sync reaches casualty quorum without marking the entry committed before apply.
+// Expected output: the third peer report triggers verification, but the entry stays uncommitted until raft apply runs.
+func TestRobotOnPeerSyncSignalsQuorumButStaysUncommitted(t *testing.T) {
 	r := newTestRobot(t, "receiver", &fakeRobotServiceClient{})
 	id := LandmarkID("casualty-2")
 	loc := Location{X: 100, Y: 200}
@@ -163,17 +169,23 @@ func TestRobotOnPeerSyncSignalsQuorumButStaysUnverified(t *testing.T) {
 
 	r.OnPeerSync(gossipRequest("peer-3", 3, &LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-3"): 3}}))
 	entry = findEntry(t, r.store, id)
-	if entry.Verified {
-		t.Fatalf("expected casualty to remain unverified before raft commit apply")
+	if !entry.Verified {
+		t.Fatalf("expected casualty to become verified on the third peer report")
+	}
+	if entry.Committed {
+		t.Fatalf("expected casualty to remain uncommitted before raft apply")
 	}
 	if len(entry.Reporters) != 3 {
 		t.Fatalf("expected 3 reporters after third peer report, got %d", len(entry.Reporters))
 	}
 
-	r.store.ApplyCasualtyVerified(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1, RobotID("peer-2"): 2, RobotID("peer-3"): 3}})
+	r.store.ApplyCasualtyCommitted(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1, RobotID("peer-2"): 2, RobotID("peer-3"): 3}})
 	entry = findEntry(t, r.store, id)
 	if !entry.Verified {
-		t.Fatalf("expected casualty to verify after raft commit apply")
+		t.Fatalf("expected casualty to stay verified after raft commit apply")
+	}
+	if !entry.Committed {
+		t.Fatalf("expected casualty to become committed after raft apply")
 	}
 }
 
@@ -196,7 +208,7 @@ func TestRobotOnPeerSyncPreservesEyewitnessProvenanceAcrossRelay(t *testing.T) {
 	}
 }
 
-// Objective: verify the first sensor sighting is recorded as a landmark without movement.
+// Objective: verify the first sensor sighting is recorded as an unverified landmark without movement.
 // Expected output: the landmark is stored with the sensor location, remains unverified, and no move request is issued.
 func TestRobotTickRecordsFirstLandmarkSighting(t *testing.T) {
 	client := &fakeRobotServiceClient{
@@ -228,6 +240,9 @@ func TestRobotTickRecordsFirstLandmarkSighting(t *testing.T) {
 	if entry.Verified {
 		t.Fatalf("expected first sighting to stay unverified")
 	}
+	if entry.Committed {
+		t.Fatalf("expected first sighting to stay uncommitted")
+	}
 	if _, ok := entry.Reporters[RobotID(r.ID)]; !ok {
 		t.Fatalf("expected robot to record itself as the first reporter")
 	}
@@ -237,7 +252,7 @@ func TestRobotTickRecordsFirstLandmarkSighting(t *testing.T) {
 }
 
 // Objective: verify movement targets an unverified casualty and stops targeting it after verification.
-// Expected output: the robot sends move requests toward the casualty before verification and chooses a different target after commit.
+// Expected output: the robot sends move requests toward the casualty before verification and chooses a different target once the casualty becomes verified.
 func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *testing.T) {
 	rand.Seed(1)
 	client := &fakeRobotServiceClient{}
@@ -267,31 +282,32 @@ func TestRequestMovementPrefersUnverifiedCasualtyAndStopsAfterVerification(t *te
 	if verified := r.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
 		t.Fatalf("expected third distinct report to signal quorum")
 	}
-	if len(r.store.UnverifiedCasualties(RobotID(r.ID))) != 1 {
-		t.Fatalf("expected casualty to stay in unverified list until raft commit apply")
+	if len(r.store.UnverifiedCasualties(RobotID(r.ID))) != 0 {
+		t.Fatalf("expected verified casualty to leave the unverified list before raft commit apply")
 	}
 
 	r.requestMovement(context.Background())
 	if len(client.moveRequests) != 2 {
-		t.Fatalf("expected a second move request while casualty is still unverified, got %d", len(client.moveRequests))
+		t.Fatalf("expected a second move request after verification, got %d", len(client.moveRequests))
 	}
 	secondMove := client.moveRequests[1]
-	if secondMove.TargetX != loc.X || secondMove.TargetY != loc.Y {
-		t.Fatalf("expected unverified casualty to remain movement target")
+	if secondMove.TargetX == loc.X && secondMove.TargetY == loc.Y {
+		t.Fatalf("expected verified casualty not to remain the movement target")
 	}
 
-	r.store.ApplyCasualtyVerified(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1, RobotID("peer-2"): 2, RobotID("peer-3"): 3}})
-	if len(r.store.UnverifiedCasualties(RobotID(r.ID))) != 0 {
-		t.Fatalf("expected casualty to disappear from unverified list after raft commit apply")
+	r.store.ApplyCasualtyCommitted(&LandmarkEntry{ID: id, Type: LandmarkCasualty, Location: loc, Reporters: map[RobotID]int{RobotID("peer-1"): 1, RobotID("peer-2"): 2, RobotID("peer-3"): 3}})
+	entry := findEntry(t, r.store, id)
+	if !entry.Committed {
+		t.Fatalf("expected casualty to become committed after raft apply")
 	}
 
 	r.requestMovement(context.Background())
 	if len(client.moveRequests) != 3 {
-		t.Fatalf("expected a third move request after raft verification, got %d", len(client.moveRequests))
+		t.Fatalf("expected a third move request after raft commit, got %d", len(client.moveRequests))
 	}
 	thirdMove := client.moveRequests[2]
 	if thirdMove.TargetX == loc.X && thirdMove.TargetY == loc.Y {
-		t.Fatalf("expected verified casualty not to be targeted again")
+		t.Fatalf("expected committed casualty not to be targeted again")
 	}
 }
 

@@ -30,5 +30,6 @@ type LandmarkEntry struct {
 	Location  Location
 	Reporters map[RobotID]int // robot ID -> Lamport timestamp
 	FirstSeen time.Time
-	Verified  bool // true once a casualty has been confirmed on-site
+	Verified  bool // true once a casualty has 3+ distinct reporters
+	Committed bool // true once the verified casualty has been applied from a committed Raft log entry
 }

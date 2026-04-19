@@ -61,5 +61,5 @@ graph TD
 | [004](adr/004-peer-to-peer-network-simulation.md) | Peer-to-Peer Network Simulation | Robots host a `PeerService` gRPC server directly, while the World Engine acts as a network oracle supplying distance-based bandwidth, latency, and reliability metrics. |
 | [005](adr/005-dedicated-raft-service-with-shared-network-constraints.md) | Dedicated Raft Service with Shared Network Constraints | Robots keep main gossip architecture, add `RaftService` on a separate port, reuse world-derived peer discovery, and apply the same simulated constraints to gossip and raft traffic without a status endpoint. |
 | [006](adr/006-decentralized-mesh-routing.md) | Decentralized Mesh Routing | Distance-vector routing layer enabling multi-hop Raft communication across the entire swarm via `PeerService.RouteMessage`. |
-| [007](adr/007-gossip-landmark-state-and-knowledge-store.md) | Gossip-Driven Landmark State | Gossip protocol definition and rules for quorum verification. |
-| [008](adr/008-robot-functionality.md) | Robot Functionality | Movement decisions based on local knowledge state and Raft log integration for verified casualties. |
+| [007](adr/007-gossip-landmark-state-and-knowledge-store.md) | Gossip-Driven Landmark State | Gossip protocol definition and rules for quorum verification and Raft commit handoff. |
+| [008](adr/008-robot-functionality.md) | Robot Functionality | Movement decisions based on local knowledge state, verified casualties, and Raft commit integration for committed casualties. |

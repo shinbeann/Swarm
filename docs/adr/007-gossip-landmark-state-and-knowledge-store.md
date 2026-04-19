@@ -5,7 +5,7 @@
 Robots discover landmarks from the WorldEngine's sensor feed and exchange those discoveries with neighbouring robots over the existing peer-to-peer gossip channel. The implementation in the robot package combines two concerns:
 
 1. spreading landmark knowledge across the swarm, and
-2. keeping a local store that can decide when a casualty report has enough independent reports to be considered verified.
+2. keeping a local store that can decide when a casualty report has enough independent reports to be considered verified, and when that verified casualty has been committed through Raft.
 
 The implementation is intentionally simple, but it is easy to misread it as a full event-driven forwarding system. It is not that.
 
@@ -66,7 +66,8 @@ The knowledge store uses `LandmarkID` as the primary key.
 1. If an incoming report has an ID that is not already in the map, a new `LandmarkEntry` is created.
 2. If the ID already exists, the report is treated as evidence for the existing landmark.
 3. The store merges the incoming entry's `Reporters` map into the local entry. The sender itself is not automatically counted as a reporter unless it actually appears in the embedded `Reporters` map.
-4. For casualty landmarks, once the number of distinct reporters reaches `VerificationQuorum` (3), the entry is marked `Verified`.
+4. For casualty landmarks, once the number of distinct reporters reaches `VerificationQuorum` (3), the entry is marked `Verified`. In this codebase, `Verified` means the casualty has quorum but has not yet been committed by Raft.
+5. Once the verified casualty is applied from a committed Raft log entry, it becomes `Committed`.
 
 Matching is therefore by ID only, not by coordinates, type, or fuzzy spatial comparison.
 
@@ -81,7 +82,7 @@ The WorldEngine assigns stable IDs when it spawns landmarks at startup, for exam
 Benefits:
 
 1. Landmark state converges gradually across the swarm without requiring a central coordinator.
-2. Casualty verification becomes a local quorum problem rather than a global service.
+2. Casualty verification becomes a local quorum problem, while commit remains a separate Raft responsibility.
 3. Delta-only sends reduce repeated payload volume compared with full-snapshot gossip.
 4. Per-link bandwidth caps and casualty-first ordering prioritise high-value reports under constrained links.
 5. The behaviour remains easy to reason about: periodic send, local merge, ID-based deduplication.

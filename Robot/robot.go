@@ -315,7 +315,7 @@ func (r *Robot) tickRaft(ctx context.Context) {
 	r.publishRaftSnapshot(ctx)
 }
 
-//helper function for publishRaftSnapshot
+// helper function for publishRaftSnapshot
 func logMessageForSnapshot(entry RaftLogEntry) string {
 	switch entry.Type {
 	case "casualty_verified":
@@ -765,8 +765,8 @@ func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
 	return true
 }
 
-// appendVerifiedCasualtiesLocked scans the store for casualty entries that have
-// reached quorum and appends each one exactly once.
+// appendVerifiedCasualtiesLocked scans the store for verified casualty entries
+// that have not yet been committed and appends each one exactly once.
 // Must be called with r.mu held.
 func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 	if r.raftState != raftLeader {
@@ -792,7 +792,7 @@ func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 		}
 		r.raftLog = append(r.raftLog, logEntry)
 		r.matchIndex[r.ID] = logEntry.Index
-		log.Printf("[Raft] Leader %s appended casualty_verified for %s idx=%d term=%d",
+		log.Printf("[Raft] Leader %s appended verified casualty entry for %s idx=%d term=%d",
 			r.ID, entry.ID, logEntry.Index, logEntry.Term)
 	}
 }
@@ -815,7 +815,8 @@ func (r *Robot) hasCasualtyVerificationLogLocked(casualtyID LandmarkID) bool {
 	return false
 }
 
-// applyCommittedEntriesLocked applies newly committed log entries exactly once.
+// applyCommittedEntriesLocked applies newly committed casualty log entries exactly once.
+// This function is used by followers to apply entries committed by the leader
 // Must be called with r.mu held.
 func (r *Robot) applyCommittedEntriesLocked() {
 	for idx := r.lastAppliedIndex + 1; idx <= r.commitIndex; idx++ {
@@ -831,8 +832,8 @@ func (r *Robot) applyCommittedEntriesLocked() {
 				log.Printf("[Raft] failed to apply casualty_verified idx=%d: %v", idx, err)
 				break
 			}
-			r.store.ApplyCasualtyVerified(&casualty)
-			log.Printf("[Raft] %s applied committed casualty_verified idx=%d casualty=%s",
+			r.store.ApplyCasualtyCommitted(&casualty)
+			log.Printf("[Raft] %s applied committed casualty idx=%d casualty=%s",
 				r.ID, idx, casualty.ID)
 		}
 

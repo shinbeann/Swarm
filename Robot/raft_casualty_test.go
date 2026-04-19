@@ -18,8 +18,8 @@ func countLogEntriesOfType(robot *Robot, entryType string) int {
 	return count
 }
 
-// Objective: verify casualty verification is only recorded once the committed Raft entry is applied.
-// Expected output: the store remains unverified before commit and becomes verified after applyCommittedEntriesLocked runs.
+// Objective: verify casualty verification is recorded at quorum and commit is tracked separately.
+// Expected output: the store becomes verified on the third reporter and becomes committed after applyCommittedEntriesLocked runs.
 func TestRaftCasualtyVerification(t *testing.T) {
 	robot1 := NewRobot("robot1", nil)
 	robot1.raftState = raftLeader // Force it to be leader
@@ -32,7 +32,7 @@ func TestRaftCasualtyVerification(t *testing.T) {
 
 	// 1st report
 	robot1.store.Add("casualty-1", LandmarkCasualty, Location{X: 10, Y: 10}, "peer1", 1)
-	
+
 	// Call syncRaftWithPeers to attempt to run appendVerifiedCasualtiesLocked
 	robot1.syncRaftWithPeers(ctx)
 
@@ -49,8 +49,11 @@ func TestRaftCasualtyVerification(t *testing.T) {
 	robot1.syncRaftWithPeers(ctx)
 
 	entryBeforeCommit := findEntry(t, robot1.store, "casualty-1")
-	if entryBeforeCommit.Verified {
-		t.Fatalf("expected casualty to remain unverified before committed raft apply")
+	if !entryBeforeCommit.Verified {
+		t.Fatalf("expected casualty to become verified before committed raft apply")
+	}
+	if entryBeforeCommit.Committed {
+		t.Fatalf("expected casualty to remain uncommitted before committed raft apply")
 	}
 
 	robot1.mu.Lock()
@@ -78,12 +81,15 @@ func TestRaftCasualtyVerification(t *testing.T) {
 
 	entryAfterCommit := findEntry(t, robot1.store, "casualty-1")
 	if !entryAfterCommit.Verified {
-		t.Fatalf("expected casualty to be verified only after committed raft apply")
+		t.Fatalf("expected casualty to stay verified after committed raft apply")
+	}
+	if !entryAfterCommit.Committed {
+		t.Fatalf("expected casualty to become committed after committed raft apply")
 	}
 }
 
 // Objective: verify a follower applies casualty verification only after the leader commits the entry.
-// Expected output: the append succeeds, the follower stays unverified before commit, and becomes verified after commit.
+// Expected output: the append succeeds, the follower stays absent before commit, and becomes verified and committed after commit.
 func TestFollowerAppliesCommittedCasualtyVerification(t *testing.T) {
 	follower := NewRobot("follower", nil)
 	follower.raftTerm = 1
@@ -142,11 +148,14 @@ func TestFollowerAppliesCommittedCasualtyVerification(t *testing.T) {
 	if !entry.Verified {
 		t.Fatalf("expected follower to verify casualty after committed raft apply")
 	}
+	if !entry.Committed {
+		t.Fatalf("expected follower to commit casualty after committed raft apply")
+	}
 }
 
-// Objective: verify a leader appends a pending casualty verification once and only once.
+// Objective: verify a leader appends a verified casualty once and only once.
 // Expected output: the first leader tick appends one casualty_verified entry, and later ticks do not add duplicates.
-func TestLeaderAppendsPendingCasualtyVerificationOnce(t *testing.T) {
+func TestLeaderAppendsVerifiedCasualtyOnce(t *testing.T) {
 	leader := NewRobot("leader", nil)
 	leader.raftState = raftLeader
 	leader.raftTerm = 1
@@ -161,6 +170,13 @@ func TestLeaderAppendsPendingCasualtyVerificationOnce(t *testing.T) {
 	}
 	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
 		t.Fatalf("expected third report to signal quorum")
+	}
+	entry := findEntry(t, leader.store, id)
+	if !entry.Verified {
+		t.Fatalf("expected casualty to be verified after the third report")
+	}
+	if entry.Committed {
+		t.Fatalf("expected casualty to remain uncommitted before leader appends it")
 	}
 
 	leader.syncRaftWithPeers(context.Background())
@@ -191,6 +207,13 @@ func TestCommittedCasualtyIsNotRecommittedByFutureLeader(t *testing.T) {
 	}
 	if verified := leader.store.Add(id, LandmarkCasualty, loc, "peer-3", 3); !verified {
 		t.Fatalf("expected third report to signal quorum")
+	}
+	entry := findEntry(t, leader.store, id)
+	if !entry.Verified {
+		t.Fatalf("expected casualty to be verified before it is committed")
+	}
+	if entry.Committed {
+		t.Fatalf("expected casualty to remain uncommitted before commit apply")
 	}
 
 	leader.syncRaftWithPeers(context.Background())
@@ -242,9 +265,12 @@ func TestCommittedCasualtyIsNotRecommittedByFutureLeader(t *testing.T) {
 	if got := countLogEntriesOfType(futureLeader, "casualty_verified"); got != 1 {
 		t.Fatalf("expected the committed casualty to exist once on the future leader, got %d", got)
 	}
-	entry := findEntry(t, futureLeader.store, id)
-	if !entry.Verified {
+	committedEntry := findEntry(t, futureLeader.store, id)
+	if !committedEntry.Verified {
 		t.Fatalf("expected future leader to have the casualty marked verified after commit apply")
+	}
+	if !committedEntry.Committed {
+		t.Fatalf("expected future leader to have the casualty committed after commit apply")
 	}
 
 	futureLeader.raftState = raftLeader

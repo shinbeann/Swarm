@@ -8,82 +8,86 @@ import (
 )
 
 const (
-    VerificationQuorum = 3 // minimum reporters to verify a landmark
+	VerificationQuorum = 3 // minimum distinct reporters required for casualty verification
 )
 
 // KnowledgeStore stores discovered landmarks.
 type KnowledgeStore struct {
-	mu         sync.RWMutex
-	entries    map[LandmarkID]*LandmarkEntry
-    quorumSeen map[LandmarkID]bool
+	mu      sync.RWMutex
+	entries map[LandmarkID]*LandmarkEntry
 }
 
 func NewKnowledgeStore() *KnowledgeStore {
-    return &KnowledgeStore{
-        entries:    make(map[LandmarkID]*LandmarkEntry),
-        quorumSeen: make(map[LandmarkID]bool),
-    }
+	return &KnowledgeStore{
+		entries: make(map[LandmarkID]*LandmarkEntry),
+	}
 }
 
 func cloneLandmarkEntry(entry *LandmarkEntry) *LandmarkEntry {
-    if entry == nil {
-        return nil
-    }
+	if entry == nil {
+		return nil
+	}
 
-    clone := *entry
-    if entry.Reporters != nil {
-        clone.Reporters = make(map[RobotID]int, len(entry.Reporters))
-        for reporter, timestamp := range entry.Reporters {
-            clone.Reporters[reporter] = timestamp
-        }
-    }
+	clone := *entry
+	if entry.Reporters != nil {
+		clone.Reporters = make(map[RobotID]int, len(entry.Reporters))
+		for reporter, timestamp := range entry.Reporters {
+			clone.Reporters[reporter] = timestamp
+		}
+	}
 
-    return &clone
+	return &clone
 }
 
 // insert or update a landmark from a single robot ID
 func (ks *KnowledgeStore) Add(id LandmarkID, ltype LandmarkType, loc Location, reporter RobotID, timestamp int) bool {
-    ks.mu.Lock()
-    defer ks.mu.Unlock()
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
 
-    entry, created := ks.ensureEntryLocked(id, ltype, loc)
-    if created && ltype == LandmarkCasualty {
-        log.Printf("[KS] NEW casualty %s at (%.1f,%.1f) first reporter=%s ts=%d",
-            id, loc.X, loc.Y, reporter, timestamp)
-    }
+	entry, created := ks.ensureEntryLocked(id, ltype, loc)
+	if created && ltype == LandmarkCasualty {
+		log.Printf("[KS] NEW casualty %s at (%.1f,%.1f) first reporter=%s ts=%d",
+			id, loc.X, loc.Y, reporter, timestamp)
+	}
 
-    return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp}, true)
+	return ks.mergeReportersLocked(entry, map[RobotID]int{reporter: timestamp}, true)
 }
 
 // merge full landmark entry
 func (ks *KnowledgeStore) MergeSnapshot(snapshot *LandmarkEntry) bool {
-    if snapshot == nil {
-        return false
-    }
+	if snapshot == nil {
+		return false
+	}
 
-    ks.mu.Lock()
-    defer ks.mu.Unlock()
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
 
-    entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
-    return ks.mergeReportersLocked(entry, snapshot.Reporters, true)
+	entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
+	newlyVerified := ks.mergeReportersLocked(entry, snapshot.Reporters, true)
+	if snapshot.Committed && !entry.Committed {
+		entry.Committed = true
+		log.Printf("[KS] casualty %s COMMITTED via merged snapshot", entry.ID)
+		entry.Verified = true
+	}
+	return newlyVerified
 }
 
-// ApplyCasualtyVerified marks a casualty as verified only after a committed Raft log entry is applied.
-func (ks *KnowledgeStore) ApplyCasualtyVerified(snapshot *LandmarkEntry) {
-    if snapshot == nil {
-        return
-    }
+// ApplyCasualtyCommitted marks a verified casualty as committed once the Raft log entry is applied.
+func (ks *KnowledgeStore) ApplyCasualtyCommitted(snapshot *LandmarkEntry) {
+	if snapshot == nil {
+		return
+	}
 
-    ks.mu.Lock()
-    defer ks.mu.Unlock()
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
 
-    entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
-    ks.mergeReportersLocked(entry, snapshot.Reporters, false)
-    if !entry.Verified {
-        entry.Verified = true
-        log.Printf("[KS] casualty %s VERIFIED via committed raft log", entry.ID)
-    }
-    ks.quorumSeen[entry.ID] = true
+	entry, _ := ks.ensureEntryLocked(snapshot.ID, snapshot.Type, snapshot.Location)
+	ks.mergeReportersLocked(entry, snapshot.Reporters, false)
+	entry.Verified = true
+	if !entry.Committed {
+		entry.Committed = true
+		log.Printf("[KS] casualty %s COMMITTED via committed raft log", entry.ID)
+	}
 }
 
 func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
@@ -92,122 +96,124 @@ func (ks *KnowledgeStore) GetAll() []*LandmarkEntry {
 
 	result := make([]*LandmarkEntry, 0, len(ks.entries))
 	for _, entry := range ks.entries {
-        result = append(result, cloneLandmarkEntry(entry))
+		result = append(result, cloneLandmarkEntry(entry))
 	}
 	return result
 }
 
 // PendingCasualtyVerifications returns casualty entries that have reached quorum
-// but have not yet been marked verified by a committed Raft entry.
+// but have not yet been committed by a Raft entry.
 func (ks *KnowledgeStore) PendingCasualtyVerifications() []*LandmarkEntry {
-    ks.mu.RLock()
-    defer ks.mu.RUnlock()
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
 
-    result := make([]*LandmarkEntry, 0)
-    for _, entry := range ks.entries {
-        if entry.Type != LandmarkCasualty {
-            continue
-        }
-        if entry.Verified {
-            continue
-        }
-        if !ks.quorumSeen[entry.ID] {
-            continue
-        }
-        result = append(result, cloneLandmarkEntry(entry))
-    }
+	result := make([]*LandmarkEntry, 0)
+	for _, entry := range ks.entries {
+		if entry.Type != LandmarkCasualty {
+			continue
+		}
+		if !entry.Verified {
+			continue
+		}
+		if entry.Committed {
+			continue
+		}
+		result = append(result, cloneLandmarkEntry(entry))
+	}
 
-    return result
+	return result
 }
 
 func (ks *KnowledgeStore) ensureEntryLocked(id LandmarkID, ltype LandmarkType, loc Location) (*LandmarkEntry, bool) {
-    entry, exists := ks.entries[id]
-    if exists {
-        if entry.Reporters == nil {
-            entry.Reporters = make(map[RobotID]int)
-        }
-        return entry, false
-    }
+	entry, exists := ks.entries[id]
+	if exists {
+		if entry.Reporters == nil {
+			entry.Reporters = make(map[RobotID]int)
+		}
+		return entry, false
+	}
 
-    entry = &LandmarkEntry{
-        ID:        id,
-        Type:      ltype,
-        Location:  loc,
-        Reporters: make(map[RobotID]int),
-        FirstSeen: time.Now(),
-        Verified:  false,
-    }
-    ks.entries[id] = entry
-    return entry, true
+	entry = &LandmarkEntry{
+		ID:        id,
+		Type:      ltype,
+		Location:  loc,
+		Reporters: make(map[RobotID]int),
+		FirstSeen: time.Now(),
+		Verified:  false,
+		Committed: false,
+	}
+	ks.entries[id] = entry
+	return entry, true
 }
 
-func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters map[RobotID]int, notifyQuorum bool) bool {
-    if entry.Reporters == nil {
-        entry.Reporters = make(map[RobotID]int)
-    }
+func (ks *KnowledgeStore) mergeReportersLocked(entry *LandmarkEntry, reporters map[RobotID]int, notifyVerification bool) bool {
+	if entry.Reporters == nil {
+		entry.Reporters = make(map[RobotID]int)
+	}
 
-    for reporter, timestamp := range reporters {
-        if _, alreadyReported := entry.Reporters[reporter]; alreadyReported {
-            continue
-        }
-        entry.Reporters[reporter] = timestamp
+	for reporter, timestamp := range reporters {
+		if _, alreadyReported := entry.Reporters[reporter]; alreadyReported {
+			continue
+		}
+		entry.Reporters[reporter] = timestamp
 
-        if entry.Type == LandmarkCasualty {
-            log.Printf("[KS] casualty %s reporter added: %s | total reporters=%d verified=%v",
-                entry.ID, reporter, len(entry.Reporters), entry.Verified)
-        }
-    }
+		if entry.Type == LandmarkCasualty {
+			log.Printf("[KS] casualty %s reporter added: %s | total reporters=%d verified=%v",
+				entry.ID, reporter, len(entry.Reporters), entry.Verified)
+		}
+	}
 
-    if entry.Type == LandmarkCasualty && !ks.quorumSeen[entry.ID] && len(entry.Reporters) >= VerificationQuorum {
-        ks.quorumSeen[entry.ID] = true
-        log.Printf("[KS] casualty %s reached quorum (%d reporters); awaiting raft commit",
-            entry.ID, len(entry.Reporters))
-        return true
-    }
+	if entry.Type == LandmarkCasualty && len(entry.Reporters) >= VerificationQuorum && !entry.Verified {
+		entry.Verified = true
+		if notifyVerification {
+			log.Printf("[KS] casualty %s reached verification quorum (%d reporters); awaiting raft commit",
+				entry.ID, len(entry.Reporters))
+		}
+		return true
+	}
 
-    return false
+	return false
 }
 
-// delete entry and its quorumSeen flag
+// delete entry and its commit state.
 func (ks *KnowledgeStore) Remove(id LandmarkID) {
-    ks.mu.Lock()
-    defer ks.mu.Unlock()
+	ks.mu.Lock()
+	defer ks.mu.Unlock()
 
-    if e, exists := ks.entries[id]; exists {
-        log.Printf("[KS] DELETE %s (%s) — was verified=%v reporters=%d",
-            id, e.Type, e.Verified, len(e.Reporters))
-    }
-    delete(ks.entries, id)
-    delete(ks.quorumSeen, id)
+	if e, exists := ks.entries[id]; exists {
+		log.Printf("[KS] DELETE %s (%s) — was verified=%v committed=%v reporters=%d",
+			id, e.Type, e.Verified, e.Committed, len(e.Reporters))
+	}
+	delete(ks.entries, id)
 }
 
-// UnverifiedCasualties returns casualty entries not yet reported by reporterID.
+// UnverifiedCasualties returns casualty entries that have not yet reached quorum.
 // The movement loop calls this to find casualties worth moving toward.
 func (ks *KnowledgeStore) UnverifiedCasualties(self RobotID) []*LandmarkEntry {
-    ks.mu.RLock()
-    defer ks.mu.RUnlock()
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
 
-    var result []*LandmarkEntry
-    for _, e := range ks.entries {
-        if e.Type != LandmarkCasualty {
-            continue
-        }
-        if e.Verified {
-            continue
-        }
-        if _, alreadyReported := e.Reporters[self]; alreadyReported {
-            continue
-        }
-        result = append(result, e)
-    }
+	var result []*LandmarkEntry
+	for _, e := range ks.entries {
+		if e.Type != LandmarkCasualty {
+			continue
+		}
+		if e.Verified {
+			continue
+		}
+		if _, alreadyReported := e.Reporters[self]; alreadyReported {
+			continue
+		}
+		result = append(result, e)
+	}
 
-    // LOG 3: what the movement loop is working with this tick
-    if len(result) > 0 {
-        ids := make([]string, len(result))
-        for i, e := range result {
-            ids[i] = fmt.Sprintf("%s(%d reporters)", e.ID, len(e.Reporters))
-        }
-        log.Printf("[KS] %s unverified casualties needing visit: %v", self, ids)
-    }
-    return result
+	// LOG 3: what the movement loop is working with this tick
+	if len(result) > 0 {
+		ids := make([]string, len(result))
+		for i, e := range result {
+			ids[i] = fmt.Sprintf("%s(%d reporters)", e.ID, len(e.Reporters))
+		}
+		log.Printf("[KS] %s unverified casualties needing visit: %v", self, ids)
+	}
+	return result
 }
