@@ -33,7 +33,40 @@ const (
 	raftElectionJitter     = 7 * time.Second  // Increased for multi-hop mesh latency.
 	raftSyncInterval       = 500 * time.Millisecond
 	raftCandidateVoteRetry = 2 * time.Second
+	raftSwarmDecisionEvery = 30 * time.Second
+	raftSwarmMoveBuffer    = 25 * time.Second
+	swarmMoveTolerance     = 80.0
 )
+
+const (
+	raftLogTypeLeaderPing        = "leader_ping"
+	raftLogTypeCasualtyVerified  = "casualty_verified"
+	raftLogTypeSwarmQuadrantMove = "swarm_quadrant_move"
+)
+
+type worldQuadrant string
+
+const (
+	quadrantTopLeft     worldQuadrant = "top_left"
+	quadrantTopRight    worldQuadrant = "top_right"
+	quadrantBottomRight worldQuadrant = "bottom_right"
+	quadrantBottomLeft  worldQuadrant = "bottom_left"
+)
+
+var quadrantCycle = []worldQuadrant{
+	quadrantTopLeft,
+	quadrantTopRight,
+	quadrantBottomRight,
+	quadrantBottomLeft,
+}
+
+type SwarmQuadrantMoveDecision struct {
+	Quadrant       worldQuadrant `json:"quadrant"`
+	TargetX        float64       `json:"target_x"`
+	TargetY        float64       `json:"target_y"`
+	Tolerance      float64       `json:"tolerance"`
+	DecisionUnixMs int64         `json:"decision_unix_ms"`
+}
 
 type RaftLogEntry struct {
 	Term            int64
@@ -72,23 +105,27 @@ type Robot struct {
 	meshRouter   *MeshRouter
 
 	// Raft-like coordination state.
-	raftState          raftNodeState
-	raftTerm           int64
-	knownLeaderID      string
-	votedFor           string
-	raftLog            []RaftLogEntry
-	commitIndex        int64
-	lastAppliedIndex   int64
-	lastRaftPingSentAt time.Time
-	lastVoteRequestAt  time.Time
-	lastLeaderSeenAt   time.Time
-	lastElectionAt     time.Time
-	electionTimeout    time.Duration
-	votesGranted       map[string]bool
-	knownPeerIDs       map[string]struct{}
-	nextIndex          map[string]int64
-	matchIndex         map[string]int64
-	totalNodes         int
+	raftState             raftNodeState
+	raftTerm              int64
+	knownLeaderID         string
+	votedFor              string
+	raftLog               []RaftLogEntry
+	commitIndex           int64
+	lastAppliedIndex      int64
+	lastRaftPingSentAt    time.Time
+	lastVoteRequestAt     time.Time
+	lastLeaderSeenAt      time.Time
+	lastElectionAt        time.Time
+	electionTimeout       time.Duration
+	votesGranted          map[string]bool
+	knownPeerIDs          map[string]struct{}
+	nextIndex             map[string]int64
+	matchIndex            map[string]int64
+	totalNodes            int
+	currentQuadrant       worldQuadrant
+	activeSwarmMove       *SwarmQuadrantMoveDecision
+	nextSwarmDecisionAt   time.Time
+	lastSwarmMoveCommitAt time.Time
 }
 
 func NewRobot(id string, client pb.RobotServiceClient) *Robot {
@@ -115,6 +152,8 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 		nextIndex:           make(map[string]int64),
 		matchIndex:          make(map[string]int64),
 		totalNodes:          1,
+		currentQuadrant:     quadrantTopLeft,
+		nextSwarmDecisionAt: time.Now().Add(raftSwarmDecisionEvery),
 	}
 
 	r.routingTable = NewRoutingTable(RobotID(id))
@@ -188,14 +227,14 @@ func (r *Robot) tick(ctx context.Context) {
 
 	// Heartbeat — WorldEngine returns the canonical position
 	heartbeatResp, err := r.Client.SendHeartbeat(ctx, &pb.HeartbeatRequest{
-		RobotId:       r.ID,
-		X:             currentX,
-		Y:             currentY,
-		Heading:       currentHeading,
-		KnownLeaderId: knownLeaderID,
-		CurrentTerm:   currentTerm,
-		LastLogIndex:  lastLogIndex,
-		CommitIndex:   commitIndex,
+		RobotId:             r.ID,
+		X:                   currentX,
+		Y:                   currentY,
+		Heading:             currentHeading,
+		KnownLeaderId:       knownLeaderID,
+		CurrentTerm:         currentTerm,
+		LastLogIndex:        lastLogIndex,
+		CommitIndex:         commitIndex,
 		VerifiedCasualtyIds: verifiedCasualtyIDs,
 	})
 	if err != nil {
@@ -320,13 +359,19 @@ func (r *Robot) tickRaft(ctx context.Context) {
 // helper function for publishRaftSnapshot
 func logMessageForSnapshot(entry RaftLogEntry) string {
 	switch entry.Type {
-	case "casualty_verified":
+	case raftLogTypeCasualtyVerified:
 		var casualty LandmarkEntry
 		if err := json.Unmarshal(entry.Payload, &casualty); err == nil {
 			return string(casualty.ID)
 		}
 		return string(entry.Payload)
-	case "leader_ping":
+	case raftLogTypeSwarmQuadrantMove:
+		var move SwarmQuadrantMoveDecision
+		if err := json.Unmarshal(entry.Payload, &move); err == nil {
+			return fmt.Sprintf("%s:(%.1f,%.1f)", move.Quadrant, move.TargetX, move.TargetY)
+		}
+		return string(entry.Payload)
+	case raftLogTypeLeaderPing:
 		return string(entry.Payload)
 	default:
 		return string(entry.Payload)
@@ -389,7 +434,43 @@ func (r *Robot) requestMovement(ctx context.Context) {
 	currentY := r.Y
 	nearObstacle := r.nearObstacle
 	obstacleAngle := r.obstacleAngle
+	var activeSwarmMove *SwarmQuadrantMoveDecision
+	if r.activeSwarmMove != nil {
+		moveCopy := *r.activeSwarmMove
+		activeSwarmMove = &moveCopy
+	}
 	r.mu.Unlock()
+
+	if activeSwarmMove != nil {
+		dx := activeSwarmMove.TargetX - currentX
+		dy := activeSwarmMove.TargetY - currentY
+		dist := math.Sqrt(dx*dx + dy*dy)
+		if dist <= activeSwarmMove.Tolerance {
+			r.mu.Lock()
+			if r.activeSwarmMove != nil && r.activeSwarmMove.DecisionUnixMs == activeSwarmMove.DecisionUnixMs {
+				r.activeSwarmMove = nil
+			}
+			r.mu.Unlock()
+			log.Printf("[move] %s arrived at committed swarm target (%.1f,%.1f) within %.1f tolerance",
+				r.ID, activeSwarmMove.TargetX, activeSwarmMove.TargetY, activeSwarmMove.Tolerance)
+		} else {
+			desiredHeading := math.Atan2(dy, dx)
+			_, err := r.Client.MoveToPosition(ctx, &pb.MoveRequest{
+				RobotId:        r.ID,
+				TargetX:        activeSwarmMove.TargetX,
+				TargetY:        activeSwarmMove.TargetY,
+				DesiredHeading: desiredHeading,
+			})
+			if err != nil {
+				log.Printf("[move] %s failed to move toward committed swarm target (%.1f,%.1f): %v",
+					r.ID, activeSwarmMove.TargetX, activeSwarmMove.TargetY, err)
+			} else {
+				log.Printf("[move] %s moving toward committed swarm target (%.1f,%.1f) quadrant=%s",
+					r.ID, activeSwarmMove.TargetX, activeSwarmMove.TargetY, activeSwarmMove.Quadrant)
+			}
+			return
+		}
+	}
 
 	// Priority 1: move toward closest unverified casualty
 	unverified := r.store.UnverifiedCasualties(RobotID(r.ID))
@@ -560,6 +641,7 @@ func (r *Robot) syncRaftWithPeers(ctx context.Context) {
 	now := time.Now()
 	state := r.raftState
 	if state == raftLeader {
+		r.appendSwarmQuadrantMoveLocked(now)
 		r.appendVerifiedCasualtiesLocked(now)
 	}
 	sendCandidateVotes := false
@@ -741,7 +823,7 @@ func (r *Robot) maybeAppendLeaderPingLocked(now time.Time) {
 	entry := RaftLogEntry{
 		Term:            r.raftTerm,
 		Index:           int64(len(r.raftLog)),
-		Type:            "leader_ping",
+		Type:            raftLogTypeLeaderPing,
 		Payload:         pingPayload,
 		TimestampUnixMs: timestampMs,
 	}
@@ -751,6 +833,62 @@ func (r *Robot) maybeAppendLeaderPingLocked(now time.Time) {
 	r.lastRaftPingSentAt = now
 	r.lastLeaderSeenAt = now
 	log.Printf("[Raft] Leader %s appended entry for propagation: idx=%d term=%d", r.ID, entry.Index, entry.Term)
+}
+
+func (r *Robot) appendSwarmQuadrantMoveLocked(now time.Time) {
+	if r.raftState != raftLeader {
+		return
+	}
+
+	if !r.nextSwarmDecisionAt.IsZero() && now.Before(r.nextSwarmDecisionAt) {
+		return
+	}
+
+	if r.hasPendingLogTypeLocked(raftLogTypeSwarmQuadrantMove) {
+		return
+	}
+
+	nextQuadrant := nextQuadrantInCycle(r.currentQuadrant)
+	targetX, targetY := centroidForQuadrant(nextQuadrant)
+	decision := SwarmQuadrantMoveDecision{
+		Quadrant:       nextQuadrant,
+		TargetX:        targetX,
+		TargetY:        targetY,
+		Tolerance:      swarmMoveTolerance,
+		DecisionUnixMs: now.UnixMilli(),
+	}
+
+	payload, err := json.Marshal(decision)
+	if err != nil {
+		log.Printf("[Raft] failed to marshal swarm quadrant move payload: %v", err)
+		return
+	}
+
+	logEntry := RaftLogEntry{
+		Term:            r.raftTerm,
+		Index:           int64(len(r.raftLog)),
+		Type:            raftLogTypeSwarmQuadrantMove,
+		Payload:         payload,
+		TimestampUnixMs: now.UnixMilli(),
+	}
+
+	r.raftLog = append(r.raftLog, logEntry)
+	r.matchIndex[r.ID] = logEntry.Index
+	log.Printf("[Raft] Leader %s appended swarm quadrant move idx=%d term=%d quadrant=%s target=(%.1f,%.1f)",
+		r.ID, logEntry.Index, logEntry.Term, decision.Quadrant, decision.TargetX, decision.TargetY)
+}
+
+func (r *Robot) hasPendingLogTypeLocked(logType string) bool {
+	start := r.commitIndex + 1
+	if start < 0 {
+		start = 0
+	}
+	for idx := start; idx < int64(len(r.raftLog)); idx++ {
+		if r.raftLog[idx].Type == logType {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Robot) shouldSendCandidateVotesLocked(now time.Time) bool {
@@ -788,7 +926,7 @@ func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 		logEntry := RaftLogEntry{
 			Term:            r.raftTerm,
 			Index:           int64(len(r.raftLog)),
-			Type:            "casualty_verified",
+			Type:            raftLogTypeCasualtyVerified,
 			Payload:         payload,
 			TimestampUnixMs: now.UnixMilli(),
 		}
@@ -801,7 +939,7 @@ func (r *Robot) appendVerifiedCasualtiesLocked(now time.Time) {
 
 func (r *Robot) hasCasualtyVerificationLogLocked(casualtyID LandmarkID) bool {
 	for _, entry := range r.raftLog {
-		if entry.Type != "casualty_verified" {
+		if entry.Type != raftLogTypeCasualtyVerified {
 			continue
 		}
 
@@ -828,7 +966,7 @@ func (r *Robot) applyCommittedEntriesLocked() {
 
 		entry := r.raftLog[idx]
 		switch entry.Type {
-		case "casualty_verified":
+		case raftLogTypeCasualtyVerified:
 			var casualty LandmarkEntry
 			if err := json.Unmarshal(entry.Payload, &casualty); err != nil {
 				log.Printf("[Raft] failed to apply casualty_verified idx=%d: %v", idx, err)
@@ -837,6 +975,22 @@ func (r *Robot) applyCommittedEntriesLocked() {
 			r.store.ApplyCasualtyCommitted(&casualty)
 			log.Printf("[Raft] %s applied committed casualty idx=%d casualty=%s",
 				r.ID, idx, casualty.ID)
+		case raftLogTypeSwarmQuadrantMove:
+			var decision SwarmQuadrantMoveDecision
+			if err := json.Unmarshal(entry.Payload, &decision); err != nil {
+				log.Printf("[Raft] failed to apply swarm_quadrant_move idx=%d: %v", idx, err)
+				break
+			}
+			if decision.Tolerance <= 0 {
+				decision.Tolerance = swarmMoveTolerance
+			}
+			r.activeSwarmMove = &decision
+			r.currentQuadrant = decision.Quadrant
+			appliedAt := time.Now()
+			r.lastSwarmMoveCommitAt = appliedAt
+			r.nextSwarmDecisionAt = appliedAt.Add(raftSwarmMoveBuffer + raftSwarmDecisionEvery)
+			log.Printf("[Raft] %s applied committed swarm move idx=%d quadrant=%s target=(%.1f,%.1f)",
+				r.ID, idx, decision.Quadrant, decision.TargetX, decision.TargetY)
 		}
 
 		r.lastAppliedIndex = idx
@@ -949,6 +1103,9 @@ func (r *Robot) becomeLeaderLocked() {
 	r.lastVoteRequestAt = time.Time{}
 	r.lastLeaderSeenAt = time.Now()
 	r.lastRaftPingSentAt = time.Time{}
+	if r.nextSwarmDecisionAt.IsZero() {
+		r.nextSwarmDecisionAt = time.Now().Add(raftSwarmDecisionEvery)
+	}
 
 	lastLogIndex := int64(len(r.raftLog))
 	for peerID := range r.knownPeerIDs {
@@ -1125,6 +1282,30 @@ func max64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func nextQuadrantInCycle(current worldQuadrant) worldQuadrant {
+	for idx, q := range quadrantCycle {
+		if q == current {
+			return quadrantCycle[(idx+1)%len(quadrantCycle)]
+		}
+	}
+	return quadrantTopRight
+}
+
+func centroidForQuadrant(quadrant worldQuadrant) (float64, float64) {
+	switch quadrant {
+	case quadrantTopLeft:
+		return 250.0, 250.0
+	case quadrantTopRight:
+		return 750.0, 250.0
+	case quadrantBottomRight:
+		return 750.0, 750.0
+	case quadrantBottomLeft:
+		return 250.0, 750.0
+	default:
+		return 250.0, 250.0
+	}
 }
 
 func (r *Robot) isPaused() bool {

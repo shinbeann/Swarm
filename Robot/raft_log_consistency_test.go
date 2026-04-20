@@ -68,6 +68,38 @@ func TestRaftLogConsistencyTruncation(t *testing.T) {
 	}
 }
 
+// Objective: verify a follower rejects an append when the leader's log is behind the follower's conflicting history.
+// Expected output: the append response is unsuccessful and the leader backtracks nextIndex.
+func TestRaftLogConsistencyRejectsStaleLeaderAppend(t *testing.T) {
+	robots := setupCluster(3)
+	r1, r2 := robots[0], robots[1]
+
+	r1.raftState = raftLeader
+	r1.raftTerm = 2
+	r2.raftTerm = 2
+
+	manuallyAppendLog(r1, 1, "cmd", []byte("a"))
+	manuallyAppendLog(r1, 1, "cmd", []byte("b"))
+	manuallyAppendLog(r2, 1, "cmd", []byte("a"))
+	manuallyAppendLog(r2, 2, "cmd", []byte("conflict"))
+
+	r1.nextIndex[r2.ID] = 2
+
+	req := r1.buildAppendEntriesRequestForPeer(r2.ID)
+	resp := r2.HandleAppendEntries(req)
+	r1.handleAppendResponse(r2.ID, req, resp)
+
+	if resp.GetSuccess() {
+		t.Fatalf("expected r2 to reject stale leader append")
+	}
+
+	r1.mu.Lock()
+	defer r1.mu.Unlock()
+	if r1.nextIndex[r2.ID] != 1 {
+		t.Fatalf("expected leader to backtrack nextIndex to 1, got %d", r1.nextIndex[r2.ID])
+	}
+}
+
 // Objective: verify leaders cannot directly commit old-term entries and only commit them indirectly through a current-term entry.
 // Expected output: the old entry remains uncommitted until the term 2 entry reaches majority, then commitIndex becomes 1.
 func TestRaftLogConsistencyIndirectCommit(t *testing.T) {

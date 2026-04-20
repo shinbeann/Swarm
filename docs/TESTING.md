@@ -27,6 +27,7 @@ The suite is broken down into Raft-focused tests and supporting Robot/system tes
 |---|---|---|
 | `raft_candidate_timing_test.go` | Election pacing and state transitions | Candidate vote retry backoff, and retry timer reset when a candidate steps down to follower. |
 | `raft_casualty_test.go` | Raft-driven casualty verification | Converting distinct casualty reports into a verified casualty and then a replicated committed log entry once the quorum is reached. |
+| `raft_quadrant_move_test.go` | Raft-driven swarm relocation | Leader scheduling of quadrant-rotation directives, commit-gated activation on followers, and buffered next-decision timing that keeps movement time separate from the 30-second cadence. |
 | `raft_election_test.go` | Elections and Candidate Mechanics | Static stability, stale leader demotion, stale log candidate rejection, split vote resolution, term safety demotions, double-vote prevention. |
 | `raft_leader_failure_test.go` | Network Partitions and Leader Death | Resolving majority-replicated but uncommitted logs upon leader death, overwriting minority-replicated logs when partitioned, and a minority follower with uncommitted logs successfully getting elected and replicating those uncommitted logs to the rest of the cluster. |
 | `raft_leader_init_test.go` | Term Beginnings | Leader state initialization (`nextIndex`/`matchIndex`), successful heartbeats, failure to out-of-sync followers, and multi-step nextIndex backtracking. |
@@ -38,7 +39,7 @@ The suite is broken down into Raft-focused tests and supporting Robot/system tes
 
 | File | Focus Area | Covered Scenarios |
 |---|---|---|
-| `robot_behavior_test.go` | Landmark Verification and Movement | First landmark sighting records a self-report, a third distinct reporter verifies a casualty, gossip reception merges peer reports and preserves the sender's embedded reporter provenance, and movement prioritizes only casualties below verification quorum before falling back to normal exploration. |
+| `robot_behavior_test.go` | Landmark Verification and Movement | First landmark sighting records a self-report, a third distinct reporter verifies a casualty, gossip reception merges peer reports and preserves the sender's embedded reporter provenance, and movement prioritizes casualties before active committed swarm relocation and then falls back to normal exploration. |
 | `routing_table_test.go` | Mesh routing and path discovery | Direct neighbour routes, advertisement merging, shortest-path replacement, route expiry, and reachable-node enumeration. |
 | `network_test.go` | Network simulation and partition behavior | Packet latency/bandwidth constraints, topology convergence, partition safety, and TTL-based mesh drops. |
 
@@ -71,11 +72,12 @@ The tests in this suite follow a set of core principles to ensure they are deter
    Each test specifically targets an edge condition or phase of the Raft algorithm (e.g. term safety, logs backtracking) making failures easy to diagnose. Tests never depend on the execution order of other tests.
 
 6. **Robot Behavior from Local State**:
-   The new Robot behavior tests avoid the live WorldEngine and instead drive the robot through deterministic local state transitions:
+   The Robot behavior tests avoid the live WorldEngine and instead drive the robot through deterministic local state transitions:
    - sensor sightings are injected through a fake RobotService client
    - gossip verification is driven directly through `OnPeerSync`
    - movement is asserted by capturing `MoveToPosition` requests from a fake client
    - gossip payloads preserve embedded eyewitness reporter provenance rather than crediting the relay sender automatically
+   - committed swarm relocation is verified by checking the active quadrant directive and the generated movement target
 
 # Details
 
@@ -91,6 +93,14 @@ The tests in this suite follow a set of core principles to ensure they are deter
 | Test case | Objective | Key setup details | Expected result |
 |---|---|---|---|
 | TestRaftCasualtyVerification | Confirms that casualty reports become verified at quorum and committed only after the Raft entry is applied. | The robot is forced into leader state, then receives three casualty reports for the same ID from three different peers before `syncRaftWithPeers` is invoked. | The Raft log gains a `casualty_verified` entry containing the casualty ID and type once the third distinct report is processed, and the casualty becomes committed after the committed Raft apply step. |
+
+## raft_quadrant_move_test.go
+
+| Test case | Objective | Key setup details | Expected result |
+|---|---|---|---|
+| TestLeaderAppendsSwarmQuadrantMoveOnSchedule | Verifies that the leader appends a quadrant-rotation directive only once the decision window opens. | A robot is forced into leader state and its next decision time is moved before and after the scheduling threshold. | No swarm move entry is appended before the threshold, one `swarm_quadrant_move` entry is appended after it, and repeated leader ticks do not duplicate it before commit. |
+| TestFollowerAppliesCommittedSwarmMoveOnlyAfterCommit | Confirms that followers only activate the swarm move after the log entry is committed. | A follower receives a `swarm_quadrant_move` append without commit, then receives a heartbeat-style append with the commit index advanced. | The move stays inactive until commit, then becomes active with the expected quadrant target and a next decision time that includes the movement buffer plus the 30-second cadence. |
+| TestRequestMovementFollowsCommittedSwarmTargetThenResumes | Ensures committed quadrant movement overrides fallback exploration until the robot arrives within tolerance. | A robot is given an active committed swarm move and then moved near the target. | The first movement request aims at the committed target, the directive clears once the robot is within the tolerance envelope, and later movement requests resume normal fallback behavior. |
 
 ## raft_election_test.go
 
@@ -185,5 +195,5 @@ The tests in this suite follow a set of core principles to ensure they are deter
 
 The Raft tests are intentionally deterministic: they drive the state machine directly instead of relying on live event loops or real network servers. The robot behavior tests similarly stay local by using fake clients and direct gossip injection rather than a full WorldEngine simulation.
 
-The current suite covers static consensus behavior and localized robot behavior transitions. Dynamic long-running swarm movement, recovery under changing topology, and broader end-to-end convergence remain good candidates for future expansion.
+The current suite covers static consensus behavior and localized robot behavior transitions, including Raft-backed swarm relocation. Dynamic long-running swarm movement, recovery under changing topology, and broader end-to-end convergence remain good candidates for future expansion.
 
