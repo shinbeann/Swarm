@@ -205,6 +205,8 @@ function App() {
     const [leaderLog, setLeaderLog] = useState<LeaderLogData>({ current_leader: '', current_term: 0, entries: [] });
     const [robots, setRobots] = useState<Robot[]>([]);
     const [hideLeaderPings, setHideLeaderPings] = useState(true);
+    const [showNetworkRange, setShowNetworkRange] = useState(true);
+    const [showSensorRange, setShowSensorRange] = useState(true);
     const [activeTool, setActiveTool] = useState<'leader-log' | 'robot-killer' | 'partioning'>('leader-log');
     const [connected, setConnected] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
@@ -326,7 +328,6 @@ function App() {
                     setRobots(data.robots);
                     setRobotCount(data.robots.length);
                     updateRobots(data.robots, appRef.current);
-                    updateCommunicationOverlay(data.robots);
 
                     const sortedIDs = data.robots.map((robot) => robot.id).sort((left, right) => left.localeCompare(right));
                     setKnownRobotIDs((previous) => (hasSameIDs(previous, sortedIDs) ? previous : sortedIDs));
@@ -378,6 +379,12 @@ function App() {
             updateEnvironment(env, envGraphicsRef.current);
         }
     }, [env, leaderLog, robots]);
+
+    useEffect(() => {
+        if (appRef.current && commGraphicsRef.current) {
+            updateCommunicationOverlay(robots);
+        }
+    }, [robots, env.width, env.height, showNetworkRange, showSensorRange]);
 
     const togglePause = () => {
         const ws = wsRef.current;
@@ -600,12 +607,16 @@ function App() {
             const centerX = robot.x * scaleX;
             const centerY = robot.y * scaleY;
 
-            const sensorRadiusX = SENSOR_RANGE * scaleX;
-            const sensorRadiusY = SENSOR_RANGE * scaleY;
-            graphics.ellipse(centerX, centerY, sensorRadiusX, sensorRadiusY);
-            graphics.stroke({ width: 2, color: colorForRobot(robot.id), alpha: 0.9 });
+            if (showSensorRange) {
+                const sensorRadiusX = SENSOR_RANGE * scaleX;
+                const sensorRadiusY = SENSOR_RANGE * scaleY;
+                graphics.ellipse(centerX, centerY, sensorRadiusX, sensorRadiusY);
+                graphics.stroke({ width: 2, color: colorForRobot(robot.id), alpha: 0.9 });
+            }
 
-            drawDottedEllipse(graphics, centerX, centerY, radiusX, radiusY, colorForRobot(robot.id), 0.78);
+            if (showNetworkRange) {
+                drawDottedEllipse(graphics, centerX, centerY, radiusX, radiusY, colorForRobot(robot.id), 0.78);
+            }
 
 
         });
@@ -698,14 +709,34 @@ function App() {
         <div className="dashboard-container">
             <header className="header glass">
                 <h1>Swarm Visualiser</h1>
-                <button
-                    type="button"
-                    className={`pause-button ${isPaused ? 'resume' : 'pause'}`}
-                    onClick={togglePause}
-                    disabled={!connected || pausePending}
-                >
-                    {pausePending ? 'Applying...' : isPaused ? 'Resume' : 'Pause'}
-                </button>
+                <div className="header-controls">
+                    <button
+                        type="button"
+                        className={`pause-button ${isPaused ? 'resume' : 'pause'}`}
+                        onClick={togglePause}
+                        disabled={!connected || pausePending}
+                    >
+                        {pausePending ? 'Applying...' : isPaused ? 'Resume' : 'Pause'}
+                    </button>
+                    <div className="range-toggle-group" role="group" aria-label="Range visibility toggles">
+                        <button
+                            type="button"
+                            className={`range-toggle-button ${showNetworkRange ? 'active' : ''}`}
+                            onClick={() => setShowNetworkRange((previous) => !previous)}
+                            aria-pressed={showNetworkRange}
+                        >
+                            Network range
+                        </button>
+                        <button
+                            type="button"
+                            className={`range-toggle-button ${showSensorRange ? 'active' : ''}`}
+                            onClick={() => setShowSensorRange((previous) => !previous)}
+                            aria-pressed={showSensorRange}
+                        >
+                            Sensor range
+                        </button>
+                    </div>
+                </div>
                 <div className="status-indicators">
                     <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`}></div>
                     <span>{connected ? 'Live' : 'Offline'}</span>

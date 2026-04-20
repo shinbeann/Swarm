@@ -22,7 +22,7 @@ services:
     networks:
       - swarm-net
     deploy:
-     replicas: 5
+     replicas: 8
 
   visualiser:
     build:

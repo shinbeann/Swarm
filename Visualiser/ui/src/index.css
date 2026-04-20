@@ -59,6 +59,13 @@ body {
   gap: 1rem;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .header h1 {
   font-size: 1.5rem;
   font-weight: 600;
@@ -81,6 +88,38 @@ body {
 
 .pause-button.pause {
   color: #ffd54f;
+}
+
+.range-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.range-toggle-button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.range-toggle-button:hover {
+  transform: translateY(-1px);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.range-toggle-button.active {
+  background: rgba(0, 255, 136, 0.12);
+  border-color: rgba(0, 255, 136, 0.45);
+  color: #ddffee;
 }
 
 .sidebar-tabs {
@@ -483,6 +522,19 @@ canvas {
 @media (max-width: 1100px) {
   .main-content {
     flex-direction: column;
+  }
+
+  .header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .header-controls {
+    width: 100%;
+  }
+
+  .range-toggle-group {
+    width: 100%;
   }
 
   .sidebar {
