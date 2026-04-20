@@ -215,6 +215,23 @@ func (ks *KnowledgeStore) Remove(id LandmarkID) {
 	delete(ks.entries, id)
 }
 
+// VerifiedCasualtyIDs returns casualty ids that have reached local verification quorum.
+func (ks *KnowledgeStore) VerifiedCasualtyIDs() []string {
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	result := make([]string, 0, len(ks.entries))
+	for _, entry := range ks.entries {
+		if entry.Type != LandmarkCasualty || !entry.Verified {
+			continue
+		}
+		result = append(result, string(entry.ID))
+	}
+
+	return result
+}
+
+
 // UnverifiedCasualties returns casualty entries that have not yet reached quorum.
 // The movement loop calls this to find casualties worth moving toward.
 func (ks *KnowledgeStore) UnverifiedCasualties(self RobotID) []*LandmarkEntry {
