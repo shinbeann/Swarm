@@ -874,6 +874,8 @@ func (r *Robot) appendSwarmQuadrantMoveLocked(now time.Time) {
 
 	r.raftLog = append(r.raftLog, logEntry)
 	r.matchIndex[r.ID] = logEntry.Index
+	r.nextSwarmDecisionAt = now.Add(raftSwarmMoveBuffer + raftSwarmDecisionEvery)
+	r.lastSwarmMoveCommitAt = now
 	log.Printf("[Raft] Leader %s appended swarm quadrant move idx=%d term=%d quadrant=%s target=(%.1f,%.1f)",
 		r.ID, logEntry.Index, logEntry.Term, decision.Quadrant, decision.TargetX, decision.TargetY)
 }
