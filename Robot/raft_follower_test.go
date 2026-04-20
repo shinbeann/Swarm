@@ -29,6 +29,38 @@ func TestRaftFollowerLagRejection(t *testing.T) {
 	}
 }
 
+// Objective: verify a leader can fan out the same append request to every follower and each follower acknowledges it.
+// Expected output: every follower accepts the append and stores the new entry.
+func TestRaftLeaderAppendFanOutToAllFollowers(t *testing.T) {
+	robots := setupCluster(4)
+	r1, r2, r3, r4 := robots[0], robots[1], robots[2], robots[3]
+
+	electLeader(t, r1, r2, r3, r4)
+
+	manuallyAppendLog(r1, r1.raftTerm, "cmd", []byte("fanout"))
+
+	followers := []*Robot{r2, r3, r4}
+	for _, follower := range followers {
+		if !replicateLog(r1, follower) {
+			t.Fatalf("expected append to succeed for %s", follower.ID)
+		}
+	}
+
+	r1.mu.Lock()
+	defer r1.mu.Unlock()
+	for _, follower := range followers {
+		if r1.nextIndex[follower.ID] != 1 {
+			t.Fatalf("expected nextIndex for %s to advance to 1, got %d", follower.ID, r1.nextIndex[follower.ID])
+		}
+		if r1.matchIndex[follower.ID] != 0 {
+			t.Fatalf("expected matchIndex for %s to be 0, got %d", follower.ID, r1.matchIndex[follower.ID])
+		}
+	}
+	if r1.commitIndex != 0 {
+		t.Fatalf("expected leader commitIndex to advance to 0 after quorum, got %d", r1.commitIndex)
+	}
+}
+
 // Objective: verify a lagging follower catches up replicated logs and advances commitIndex on heartbeat.
 // Expected output: r2 receives both entries and advances commitIndex to 1.
 func TestRaftFollowerCatchupAndCommitUpdate(t *testing.T) {

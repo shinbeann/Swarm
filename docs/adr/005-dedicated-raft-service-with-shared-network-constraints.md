@@ -1,5 +1,7 @@
 # Dedicated Raft Service with Shared Network Constraints
 
+> Warning: this ADR is historical. ADR-006 supersedes the transport model described here. Raft traffic no longer uses a dedicated `RaftService` on `:50053`; nodes now piggyback Raft RPCs over `PeerService.RouteMessage` on the gossip port (`:50052`).
+
 ## Context
 
 The project previously evolved two competing directions:
