@@ -100,6 +100,99 @@ func TestRaftLogConsistencyRejectsStaleLeaderAppend(t *testing.T) {
 	}
 }
 
+// Objective: verify a prior-term uncommitted entry is overwritten by a newer-term leader at the same log index.
+// Expected output: stale leader nodes step down, detect the conflicting index, and replace it with the leader's newer term entry.
+func TestRaftLogConsistencyTermBasedConflictResolution(t *testing.T) {
+	robots := setupCluster(5)
+	r1, r2, r3, r4, r5 := robots[0], robots[1], robots[2], robots[3], robots[4]
+
+	// All nodes share a common term-1 prefix through index 4.
+	for _, node := range []*Robot{r1, r2, r3, r4, r5} {
+		for i := 0; i < 5; i++ {
+			manuallyAppendLog(node, 1, "cmd", []byte("prefix"))
+		}
+	}
+
+	// Nodes A and B have an uncommitted term-1 entry at index 5.
+	manuallyAppendLog(r1, 1, "cmd", []byte("x=10"))
+	manuallyAppendLog(r2, 1, "cmd", []byte("x=10"))
+
+	// Elect C as leader in a separate majority partition for term 2.
+	forceElectionTimeout(r3)
+	r3.maybeStartElection()
+	voteReq := r3.buildVoteRequest()
+	resp4 := r4.HandleRequestVote(voteReq)
+	resp5 := r5.HandleRequestVote(voteReq)
+	r3.handleVoteResponse(r4.ID, resp4)
+	r3.handleVoteResponse(r5.ID, resp5)
+
+	if r3.raftState != raftLeader {
+		t.Fatalf("expected r3 to become leader")
+	}
+
+	// C receives a conflicting term-2 entry at index 5 and replicates it to D and E.
+	manuallyAppendLog(r3, 2, "cmd", []byte("x=20"))
+	r3.nextIndex[r4.ID] = 5
+	r3.nextIndex[r5.ID] = 5
+	if !replicateLog(r3, r4) || !replicateLog(r3, r5) {
+		t.Fatalf("expected r3 to replicate the term-2 entry to a majority")
+	}
+
+	r3.mu.Lock()
+	if r3.commitIndex != 5 {
+		t.Fatalf("expected leader r3 commitIndex to advance to 5, got %d", r3.commitIndex)
+	}
+	r3.mu.Unlock()
+
+	// Reconnect the partition and let A/B receive the newer leader's AppendEntries.
+	r3.nextIndex[r1.ID] = 5
+	r3.nextIndex[r2.ID] = 5
+
+	reqA := r3.buildAppendEntriesRequestForPeer(r1.ID)
+	respA := r1.HandleAppendEntries(reqA)
+	r3.handleAppendResponse(r1.ID, reqA, respA)
+	if !respA.GetSuccess() {
+		t.Fatalf("expected r1 to accept the newer leader's append")
+	}
+
+	reqB := r3.buildAppendEntriesRequestForPeer(r2.ID)
+	respB := r2.HandleAppendEntries(reqB)
+	r3.handleAppendResponse(r2.ID, reqB, respB)
+	if !respB.GetSuccess() {
+		t.Fatalf("expected r2 to accept the newer leader's append")
+	}
+
+	r1.mu.Lock()
+	if r1.raftState != raftFollower {
+		t.Fatalf("expected r1 to step down to follower")
+	}
+	if r1.raftTerm != 2 {
+		t.Fatalf("expected r1 to update to term 2, got %d", r1.raftTerm)
+	}
+	if !bytes.Equal(r1.raftLog[5].Payload, []byte("x=20")) {
+		t.Fatalf("expected r1 index 5 to be overwritten with x=20")
+	}
+	if r1.commitIndex != 5 {
+		t.Fatalf("expected r1 commitIndex to advance to 5, got %d", r1.commitIndex)
+	}
+	r1.mu.Unlock()
+
+	r2.mu.Lock()
+	if r2.raftState != raftFollower {
+		t.Fatalf("expected r2 to remain follower")
+	}
+	if r2.raftTerm != 2 {
+		t.Fatalf("expected r2 to update to term 2, got %d", r2.raftTerm)
+	}
+	if !bytes.Equal(r2.raftLog[5].Payload, []byte("x=20")) {
+		t.Fatalf("expected r2 index 5 to be overwritten with x=20")
+	}
+	if r2.commitIndex != 5 {
+		t.Fatalf("expected r2 commitIndex to advance to 5, got %d", r2.commitIndex)
+	}
+	r2.mu.Unlock()
+}
+
 // Objective: verify leaders cannot directly commit old-term entries and only commit them indirectly through a current-term entry.
 // Expected output: the old entry remains uncommitted until the term 2 entry reaches majority, then commitIndex becomes 1.
 func TestRaftLogConsistencyIndirectCommit(t *testing.T) {
