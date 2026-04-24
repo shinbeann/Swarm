@@ -136,6 +136,35 @@ func TestNetworkPartitionsAndRaftSplitBrain(t *testing.T) {
 	}
 }
 
+// Objective: verify topology churn does not change the fixed Raft membership size.
+// Expected output: r1 keeps the original cluster size even after all routes are pruned.
+func TestRaftTotalNodesRemainsFixedAfterTopologyUpdate(t *testing.T) {
+	robots := setupCluster(5)
+	r1 := robots[0]
+
+	r1.mu.Lock()
+	initialTotalNodes := r1.totalNodes
+	r1.mu.Unlock()
+	if initialTotalNodes != 5 {
+		t.Fatalf("expected initial totalNodes 5, got %d", initialTotalNodes)
+	}
+
+	r1.routingTable.mu.Lock()
+	for _, route := range r1.routingTable.routes {
+		route.LastUpdated = time.Now().Add(-2 * routeExpiryTimeout)
+	}
+	r1.routingTable.mu.Unlock()
+	r1.routingTable.PruneExpired(routeExpiryTimeout)
+	r1.updateRaftPeerTopology()
+
+	r1.mu.Lock()
+	deferredTotalNodes := r1.totalNodes
+	r1.mu.Unlock()
+	if deferredTotalNodes != 5 {
+		t.Fatalf("expected fixed totalNodes to remain 5 after topology churn, got %d", deferredTotalNodes)
+	}
+}
+
 // Objective: verify routed messages are dropped when TTL expires.
 // Expected output: the router reports the message as undelivered.
 func TestMeshTTLDrops(t *testing.T) {

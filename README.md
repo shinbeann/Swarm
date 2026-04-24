@@ -22,30 +22,21 @@ The architecture relies on a **Hub and Spoke** pattern for simulation physics, w
 The entire swarm simulation is containerized and orchestrated via Docker Compose.
 
 1. **Clone the repository.**
-2. **Build and start the simulation:**
+2. Set the number of robots in the `docker-compose.yml` file under the `robot` service's `deploy.replicas` field and the `ROBOT_TOTAL_NODES` environment variable (default is 9).
+3. **Build and start the simulation:**
    ```bash
    docker compose up --build
    ```
    This will spin up:
    - 1 `world-engine` container on port `50051`.
-   - 2 `robot` instances (extensible in the `docker-compose.yml`) navigating the simulation.
+   - 9 `robot` instances (extensible in the `docker-compose.yml`) navigating the simulation.
    - 1 `visualiser` proxy container on port `8080`, exposing the web UI on port `3000`.
 
-3. **View the Simulation:**
+4. **View the Simulation:**
    Open a web browser and navigate to:
    ```
    http://localhost:3001
    ```
    You will see the live swarm dashboard charting the boundaries, obstacles, and tracked robots.
-
-## Expanding the Swarm
-
-You can now start any number of robot containers without manually duplicating services.
-
-Example: start 5 robots (replacing the previous per-service robot entries):
-
-```bash
-docker compose up --build --scale robot=5
-```
 
 Each robot will derive a unique ID from its container hostname when no `ROBOT_ID`/`-id` is provided, so the visualiser and world engine will receive distinct robot identifiers automatically.

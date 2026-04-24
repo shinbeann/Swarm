@@ -25,7 +25,7 @@ func setupCluster(n int) []*Robot {
 	robots := make([]*Robot, n)
 	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("r%d", i+1)
-		robots[i] = NewRobot(id, nil)
+		robots[i] = NewRobot(id, nil, n)
 	}
 
 	for i := 0; i < n; i++ {

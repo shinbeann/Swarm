@@ -17,12 +17,14 @@ services:
       dockerfile: Robot/Dockerfile
     # Robot will derive a unique ID from the container hostname when not provided.
     command: [ "--world-engine=world-engine:50051" ]
+    environment:
+      ROBOT_TOTAL_NODES: 9
     depends_on:
       - world-engine
     networks:
       - swarm-net
     deploy:
-     replicas: 8
+     replicas: 9
 
   visualiser:
     build:

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	pb "github.com/yihre/swarm-project/communications/proto"
@@ -56,6 +57,7 @@ var (
 	worldEngineAddr = flag.String("world-engine", "world-engine:50051", "The address of the WorldEngine gRPC server")
 	robotID         = flag.String("id", os.Getenv("ROBOT_ID"), "The unique ID for this robot")
 	raftAddr        = flag.String("raft-addr", ":50053", "gRPC address for dedicated Raft service")
+	totalNodes      = flag.Int("total-nodes", 0, "Fixed Raft swarm size used for quorum calculations")
 )
 
 func main() {
@@ -76,6 +78,21 @@ func main() {
 
 	log.Printf("Starting Robot %s...", *robotID)
 
+	initialTotalNodes := *totalNodes
+	if initialTotalNodes <= 0 {
+		if envValue := os.Getenv("ROBOT_TOTAL_NODES"); envValue != "" {
+			parsed, err := strconv.Atoi(envValue)
+			if err != nil || parsed <= 0 {
+				log.Fatalf("invalid ROBOT_TOTAL_NODES value %q: must be a positive integer", envValue)
+			}
+			initialTotalNodes = parsed
+		}
+	}
+	if initialTotalNodes <= 0 {
+		initialTotalNodes = 1
+		log.Printf("[Raft] ROBOT_TOTAL_NODES not set; defaulting to a single-node quorum")
+	}
+
 	// Set up a connection to the world engine.
 	conn, err := grpc.NewClient(*worldEngineAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -90,7 +107,7 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
-	robot := NewRobot(*robotID, client)
+	robot := NewRobot(*robotID, client, initialTotalNodes)
 	robot.SetRaftObserverClient(raftObserverClient)
 
 	// Start Peer gRPC server

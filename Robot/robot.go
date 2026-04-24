@@ -128,7 +128,12 @@ type Robot struct {
 	lastSwarmMoveCommitAt time.Time
 }
 
-func NewRobot(id string, client pb.RobotServiceClient) *Robot {
+func NewRobot(id string, client pb.RobotServiceClient, swarmSize ...int) *Robot {
+	initialTotalNodes := 1
+	if len(swarmSize) > 0 && swarmSize[0] > 0 {
+		initialTotalNodes = swarmSize[0]
+	}
+
 	r := &Robot{
 		ID:                  id,
 		X:                   100 + rand.Float64()*200,
@@ -151,7 +156,7 @@ func NewRobot(id string, client pb.RobotServiceClient) *Robot {
 		knownPeerIDs:        make(map[string]struct{}),
 		nextIndex:           make(map[string]int64),
 		matchIndex:          make(map[string]int64),
-		totalNodes:          1,
+		totalNodes:          initialTotalNodes,
 		currentQuadrant:     quadrantTopLeft,
 		nextSwarmDecisionAt: time.Now().Add(raftSwarmDecisionEvery),
 	}
@@ -789,7 +794,6 @@ func (r *Robot) updateRaftPeerTopology() []string {
 		}
 	}
 
-	r.totalNodes = len(r.knownPeerIDs) + 1
 	return currentPeers
 }
 
