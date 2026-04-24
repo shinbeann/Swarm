@@ -9,7 +9,7 @@ Therefore, the actual Go test files are located alongside `robot.go` in the pare
 ## Test Files Location
 
 - `Robot/raft_test_helpers_test.go`: Shared initialization and validation helpers.
-- `Robot/raft_election_test.go`: Node voting, term progression, split votes.
+- `Robot/raft_election_test.go`: Node voting, term progression, split votes, candidate vote retry pacing, and follower-transition timer reset.
 - `Robot/raft_leader_failure_test.go`: Majority/minority log replication and leader death.
 - `Robot/raft_leader_init_test.go`: Leader state transitions, `nextIndex`/`matchIndex` setup.
 - `Robot/raft_follower_test.go`: Follower lag, catch-up, and heartbeat idempotency.
@@ -25,23 +25,22 @@ The suite is broken down into Raft-focused tests and supporting Robot/system tes
 
 | File | Focus Area | Covered Scenarios |
 |---|---|---|
-| `raft_candidate_timing_test.go` | Election pacing and state transitions | Candidate vote retry backoff, and retry timer reset when a candidate steps down to follower. |
-| `raft_casualty_test.go` | Raft-driven casualty verification | Converting distinct casualty reports into a verified casualty and then a replicated committed log entry once the quorum is reached. |
-| `raft_quadrant_move_test.go` | Raft-driven swarm relocation | Leader scheduling of quadrant-rotation directives, commit-gated activation on followers, and buffered next-decision timing that keeps movement time separate from the 30-second cadence. |
-| `raft_election_test.go` | Elections and Candidate Mechanics | Static stability, stale leader demotion, stale log candidate rejection, split vote resolution, term safety demotions, double-vote prevention. |
-| `raft_leader_failure_test.go` | Network Partitions and Leader Death | Resolving majority-replicated but uncommitted logs upon leader death, overwriting minority-replicated logs when partitioned, and a minority follower with uncommitted logs successfully getting elected and replicating those uncommitted logs to the rest of the cluster. |
-| `raft_leader_init_test.go` | Term Beginnings | Leader state initialization (`nextIndex`/`matchIndex`), successful heartbeats, failure to out-of-sync followers, and multi-step nextIndex backtracking. |
-| `raft_follower_test.go` | Follower Reactivity | Rejection of laggy prevLogIndex, catching up on missing logs, correct math handling for updating `commitIndex`, and idempotency (duplicate drops). |
-| `raft_term_safety_test.go` | Universal Protection | Automatic follower transition when observing higher terms in responses or requests, rejecting requests from lower terms. |
-| `raft_log_consistency_test.go` | Append Math | Exact log appending, excess entry truncation, conflict resolutions, and Raft's edge-case rule forbidding direct commits of previous-term entries. |
+| `raft_casualty_test.go` | Raft-driven casualty verification | This file checks how casualty reports become verified at quorum and then turn into a committed Raft entry. |
+| `raft_quadrant_move_test.go` | Raft-driven swarm relocation | This file checks how leaders schedule quadrant moves, followers activate them only on commit, and movement timing stays buffered from the normal cadence. |
+| `raft_election_test.go` | Elections and Candidate Mechanics | This file covers the full election path, including retry pacing, split votes, stale term/log rejection, demotion rules, and double-vote protection. |
+| `raft_leader_failure_test.go` | Network Partitions and Leader Death | This file checks how the cluster recovers from leader loss, preserves majority-replicated logs, and overwrites minority-only history. |
+| `raft_leader_init_test.go` | Term Beginnings | This file checks leader startup behavior, from `nextIndex` and `matchIndex` initialization to heartbeat success and backtracking. |
+| `raft_follower_test.go` | Follower Reactivity | This file checks how followers reject stale replication, catch up on missing entries, update commit state, and ignore duplicate appends. |
+| `raft_term_safety_test.go` | Universal Protection | This file checks that nodes step down for higher terms and reject stale requests that fall behind their current term. |
+| `raft_log_consistency_test.go` | Append Math | This file checks log conflict handling, truncation, and Raft’s rules for when older-term entries can be committed. |
 
 ### Other Robot/system test files
 
 | File | Focus Area | Covered Scenarios |
 |---|---|---|
-| `robot_behavior_test.go` | Landmark Verification and Movement | First landmark sighting records a self-report, a third distinct reporter verifies a casualty, gossip reception merges peer reports and preserves the sender's embedded reporter provenance, and movement prioritizes casualties before active committed swarm relocation and then falls back to normal exploration. |
-| `routing_table_test.go` | Mesh routing and path discovery | Direct neighbour routes, advertisement merging, shortest-path replacement, route expiry, and reachable-node enumeration. |
-| `network_test.go` | Network simulation and partition behavior | Packet latency/bandwidth constraints, topology convergence, partition safety, and TTL-based mesh drops. |
+| `robot_behavior_test.go` | Landmark Verification and Movement | This file follows the robot’s local behavior as sightings become verified casualties and movement shifts from casualties to committed swarm directives. |
+| `routing_table_test.go` | Mesh routing and path discovery | This file checks how the mesh learns routes, prefers shorter paths, expires stale entries, and reports everything still reachable. |
+| `network_test.go` | Network simulation and partition behavior | This file checks network timing, topology changes, partition safety, and TTL-based delivery failure. |
 
 
 NOTE: The test suite proves what happens with a static raft system. But with dynamically moving robots, topologies and network conditions change. The behaviour under such dynamism is not yet tested. Furthermore, behaviour might be correct, but the performance, disruption and recovery time under such conditions is also not yet measured. These are important areas for future test expansion.  
@@ -81,13 +80,6 @@ The tests in this suite follow a set of core principles to ensure they are deter
 
 # Details
 
-## raft_candidate_timing_test.go
-
-| Test case | Objective | Key setup details | Expected result |
-|---|---|---|---|
-| TestCandidateVoteRetryPacing | Verifies that a candidate does not spam vote requests and respects the retry interval between rounds. | A robot is placed in candidate state and `shouldSendCandidateVotesLocked` is checked at several simulated time offsets. | The first vote round is allowed immediately, the next call is throttled before the retry window elapses, and a later call is allowed again after the interval passes. |
-| TestCandidateVoteRetryResetOnFollowerTransition | Confirms that the vote retry timer is cleared when a candidate steps down to follower. | A robot starts as a candidate, sends a vote round, then transitions to follower after observing a higher term. | `lastVoteRequestAt` is reset to the zero time value after the follower transition. |
-
 ## raft_casualty_test.go
 
 | Test case | Objective | Key setup details | Expected result |
@@ -107,6 +99,8 @@ The tests in this suite follow a set of core principles to ensure they are deter
 | Test case | Objective | Key setup details | Expected result |
 |---|---|---|---|
 | TestRaftElectionBasic | Verifies the normal election path where a candidate wins a majority and becomes leader. | A five-node cluster is prepared, `r1` is forced into candidate state, votes are delivered from `r2` and `r3`, and `r4` receives a heartbeat from the winning leader. | `r1` becomes leader, the other nodes remain followers, and heartbeat processing refreshes the follower’s last-leader timestamp. |
+| TestCandidateVoteRetryPacing | Verifies that a candidate does not spam vote requests and respects the retry interval between rounds. | A robot is placed in candidate state and `shouldSendCandidateVotesLocked` is checked at several simulated time offsets. | The first vote round is allowed immediately, the next call is throttled before the retry window elapses, and a later call is allowed again after the interval passes. |
+| TestCandidateVoteRetryResetOnFollowerTransition | Confirms that the vote retry timer is cleared when a candidate steps down to follower. | A robot starts as a candidate, sends a vote round, then transitions to follower after observing a higher term. | `lastVoteRequestAt` is reset to the zero time value after the follower transition. |
 | TestRaftStaleLeaderDemotion | Ensures a leader with an older term steps down when it encounters a newer term. | `r1` starts as leader in term 1, `r2` is leader in term 2, and `r1` sends a heartbeat-style AppendEntries to `r2`. | `r2` rejects the stale leader, while `r1` demotes to follower and updates its term to 2. |
 | TestRaftElectionStaleLogRejection | Prevents a candidate with a stale or shorter log from winning an election. | `r2` and `r3` each hold a one-entry log in term 1, while `r1` has an empty log and starts an election in term 2. | `r2` rejects `r1`’s vote request and `r1` fails to become leader. |
 | TestRaftSplitVote | Exercises a split-vote scenario and verifies that a later term can resolve it. | A four-node cluster is created, `r1` and `r2` both start elections in term 2, the remaining votes split evenly, and `r1` retries in term 3. | Neither candidate wins in term 2, and `r1` wins the election in term 3. |
